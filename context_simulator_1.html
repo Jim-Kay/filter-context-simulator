@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Filter Context Visualizer</title>
+  <style>
+    :root{
+      /* Pluralsight palette (from brand guidelines in screenshot) */
+      --ps-pink:#FF1675;         /* Transform Pink */
+      --ps-inky:#130F25;         /* Inky Blue (dark) */
+      --ps-blue:#00A3FF;         
+      --ps-purple:#770EE7;       
+      --ps-yellow:#FFC942;       
+      --ps-orange:#FF7B01;       
+      --ps-green:#02E08B;        
+      --ps-gray-900:#1B1834;     
+      --ps-gray-600:#585FA2;     
+      --ps-gray-100:#EBEFF5;     
+      --bg:white;                /* white background, per request */
+      --text:#1b1b1b;
+      --muted:#80879c;
+      --radius:14px;             /* rounded corners for tables/cards */
+      --shadow:0 6px 24px rgba(0,0,0,.08), 0 2px 8px rgba(0,0,0,.06);
+      --cell-dim: .22;           /* opacity for dimmed cells */
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; padding:24px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background:var(--bg); color:var(--text);
+    }
+    header{display:flex; align-items:center; gap:14px; margin-bottom:18px}
+    .logo-dot{width:14px; height:14px; border-radius:50%; background:var(--ps-pink); box-shadow:0 0 0 6px rgba(255,22,117,.12)}
+    h1{font-size:clamp(20px, 2.8vw, 30px); margin:0; font-weight:800; letter-spacing:.3px}
+    .sub{color:var(--muted); margin-top:4px}
+
+    .panel{
+      border:1px solid var(--ps-gray-100);
+      border-radius:var(--radius);
+      background:#fff;
+      box-shadow:var(--shadow);
+      padding:16px;
+    }
+    .controls{display:flex; flex-direction:column; gap:12px; align-items:stretch}
+    .controls .field{grid-column: span 3}
+    .controls .field.double{grid-column: span 6}
+    label{display:block; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--ps-gray-600); margin:0 0 6px}
+    select, button, .token-input{
+      width:100%;
+      border-radius:10px; border:1px solid var(--ps-gray-100); padding:10px 12px; font-size:14px; background:white; color:var(--text);
+      outline:none; box-shadow:0 1px 0 rgba(0,0,0,.03) inset;
+    }
+    button.primary{background:var(--ps-pink); color:#fff; border:none; font-weight:700; cursor:pointer}
+    button.ghost{background:transparent; border:1px solid var(--ps-gray-100); color:var(--text)}
+    button:active{transform:translateY(1px)}
+
+    .legend{display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin:8px 0 0 0}
+    .legend .chip{display:inline-flex; align-items:center; gap:8px; font-size:12px; color:#3c3f4a}
+    .dot{width:12px; height:12px; border-radius:6px; background:var(--ps-gray-100); box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+    .dot.sel{background:var(--ps-pink)}
+    .dot.dim{background:var(--ps-gray-600); opacity:.25}
+    .dot.tuple{background:var(--ps-yellow)}
+
+    .stage{margin-top:12px; display:grid; grid-template-columns: 320px minmax(0,1fr); gap:16px; align-items:start}
+    .card{background:#fff; border:1px solid var(--ps-gray-100); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; overflow:auto}
+    .card h3{margin:0 0 10px; font-size:16px}
+
+    /* Table visuals */
+    table.matrix{border-collapse:separate; border-spacing:0; width:max-content; min-width:60%; overflow:hidden; border-radius:var(--radius);} 
+    .matrix th, .matrix td{padding:10px 12px; border:1px solid var(--ps-gray-100); text-align:center; min-width:72px}
+    .matrix thead th{position:sticky; top:0; background:#fafbfe; font-weight:700}
+    .matrix .stub{position:sticky; left:0; background:#fafbfe; font-weight:700}
+
+    /* Cell states */
+    .cell{background:#fff; transition:filter .15s, opacity .15s, transform .15s}
+    .cell.dim{opacity:var(--cell-dim); text-decoration: line-through;}
+    .cell.sel{outline:2px solid var(--ps-pink); outline-offset:-2px; font-weight:700}
+    .cell.tuple{background:linear-gradient(135deg, rgba(255,201,66,.35), rgba(255,123,1,.25)); box-shadow:inset 0 0 0 2px rgba(255,201,66,.6)}
+    /* Header dim state */
+    .stub.dim{opacity:var(--cell-dim); text-decoration: line-through;}
+    .matrix thead th.dim{opacity:var(--cell-dim); text-decoration: line-through;}
+
+    /* 1D calculation column */
+    .data-wrap{display:grid; grid-template-columns: max-content 1fr; gap:16px; align-items:start}
+    /* Explicit widths for 1D Month/Sales columns */
+    .matrix-1d col.col-month{width:360px}
+    .matrix-1d col.col-sales{width:440px}
+    /* Calculation table aligned to data rows */
+    .calc-table{border-collapse:separate; border-spacing:0;}
+    .calc-table thead th{padding:10px 12px; background:#fafbfe; font-weight:700}
+    .calc-table td{padding:10px 12px; white-space:nowrap}
+    .calc-table tbody tr + tr td{border-top:1px solid var(--ps-gray-100)}
+    .calc-ok{color:var(--ps-green); font-weight:700}
+    .calc-no{color:#E5484D}
+
+    /* 3D cube (stacked layers) */
+    .cube{display:grid; gap:14px}
+    .cube-layer{display:flex; gap:10px; align-items:flex-start}
+    .layer-badge{min-width:86px; text-align:center; padding:8px 10px; border-radius:10px; font-weight:700; color:#fff; background:var(--ps-purple)}
+    .layer-grid{transform:skew(-6deg); filter: drop-shadow(0 10px 18px rgba(0,0,0,.08));}
+    .layer-grid table{transform:skew(6deg);}
+
+    /* Pills */
+    .pills{display:flex; gap:8px; flex-wrap:wrap}
+    .pill{padding:6px 10px; border-radius:999px; border:1px solid var(--ps-gray-100); background:#fff; cursor:pointer; font-size:13px}
+    .pill.active{border-color:var(--ps-pink); box-shadow:0 0 0 3px rgba(255,22,117,.12); color:var(--ps-pink); font-weight:700}
+
+    .footer-note{margin-top:12px; color:var(--muted); font-size:12px}
+
+    /* New layout helpers */
+    .sidebar{background:#fff; border:1px solid var(--ps-gray-100); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; position:sticky; top:12px}
+    .main{display:grid; gap:16px}
+    .legend{margin-top:6px}
+    .panel{display:none}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo-dot" aria-hidden="true"></div>
+    <div>
+      <h1>Filter Context Visualizer</h1>
+      <div class="sub">Select a scenario to see how filter context shapes your calculations (1D, 2D, and 3D tuples).</div>
+    </div>
+  </header>
+
+  <section class="stage">
+    <aside class="sidebar" aria-label="Scenario & Filters">
+      <div class="field double">
+        <label for="scenario">Scenario</label>
+        <select id="scenario">
+          <option value="1d">1D — Sales by Month</option>
+          <option value="2d">2D — Date × City</option>
+          <option value="3d">3D — Date × City × Product</option>
+        </select>
+      </div>
+      <div class="field double">
+        <label>Filter Selection</label>
+        <div id="filters" class="pills" role="group" aria-label="filters"></div>
+      </div>
+      <div class="field">
+        <label for="showCalc" style="display:flex; gap:8px; align-items:center; text-transform:none; letter-spacing:0; font-size:14px; color:inherit">
+          <input id="showCalc" type="checkbox" checked />
+          Show Calculation
+        </label>
+      </div>
+      <div class="field">
+        <button id="clear" class="ghost" type="button">Clear Filters</button>
+      </div>
+      <div class="field">
+        <button id="reset" class="primary" type="button">Reset Demo Data</button>
+      </div>
+      <div class="legend">
+        <span class="chip"><span class="dot sel"></span> Selected filter(s)</span>
+        <span class="chip"><span class="dot tuple"></span> Tuple intersection</span>
+        <span class="chip"><span class="dot dim"></span> Inactive by filter context</span>
+      </div>
+    </aside>
+
+    <div class="main">
+      <div class="card">
+        <h3>Data View</h3>
+        <div id="view"></div>
+        <div class="footer-note">Tip: try selecting multiple cities in 2D/3D or a specific product layer in 3D to see tuples (Date ∩ City ∩ Product).</div>
+      </div>
+      <div class="card">
+        <h3>What You’re Seeing</h3>
+        <div id="explain"></div>
+      </div>
+    </div>
+  </section>
+
+<script>
+(function(){
+  // ---------------------------
+  // Demo Data
+  // ---------------------------
+  const months = ["Jan","Feb","Mar","Apr"];
+  const cities = ["Austin","Boston","Chicago","Denver"];
+  const products = ["Widget A","Widget B","Widget C"];
+
+  // Construct demo numeric data deterministically for repeatability
+  const seededRand = (seed) => () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const rnd = seededRand(42);
+
+  let data = {
+    oneD: months.map(m => ({ month: m, sales: Math.round(400 + rnd()*600) })),
+    twoD: months.map(m => ({
+      month:m,
+      cities: Object.fromEntries(cities.map(c=>[c, Math.round(100 + rnd()*200)]))
+    })),
+    threeD: products.map(p => ({
+      product:p,
+      grid: months.map(m => ({
+        month:m,
+        cities: Object.fromEntries(cities.map(c=>[c, Math.round(50 + rnd()*150)]))
+      }))
+    }))
+  };
+
+  // ---------------------------
+  // App State
+  // ---------------------------
+  const state = {
+    scenario: '1d',
+    filters: new Set(),   // items depend on scenario
+    layer: null,          // for 3D: selected product layer (null = all)
+    showCalc: true        // for 1D: show calculation panel
+  };
+
+  // ---------------------------
+  // DOM helpers
+  // ---------------------------
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => Array.from(document.querySelectorAll(sel));
+  const view = $('#view');
+  const explain = $('#explain');
+  const scenarioSel = $('#scenario');
+  const filtersEl = $('#filters');
+  const showCalcEl = $('#showCalc');
+
+  $('#clear').addEventListener('click', ()=>{state.filters.clear(); state.layer = null; render();});
+  $('#reset').addEventListener('click', ()=>{ state.filters.clear(); state.layer=null; render();});
+  scenarioSel.addEventListener('change', ()=>{ state.scenario = scenarioSel.value; state.filters.clear(); state.layer=null; render();});
+  showCalcEl.addEventListener('change', ()=>{ state.showCalc = showCalcEl.checked; render(); });
+
+  // ---------------------------
+  // Rendering
+  // ---------------------------
+  function renderFilters(){
+    filtersEl.innerHTML = '';
+    if(state.scenario==='1d'){
+      months.forEach(m=>filtersEl.appendChild(makePill(m)));
+    } else if(state.scenario==='2d'){
+      // Allow selecting any months + any cities
+      months.forEach(m=>filtersEl.appendChild(makePill(m)));
+      cities.forEach(c=>filtersEl.appendChild(makePill(c)));
+    } else {
+      // 3D: Add product layer selector first
+      const layerGroup = document.createElement('div');
+      layerGroup.style.display='flex'; layerGroup.style.gap='8px'; layerGroup.style.flexWrap='wrap'; layerGroup.style.marginBottom='6px';
+      const label = document.createElement('span'); label.textContent='Layer:'; label.style.fontSize='12px'; label.style.color='var(--ps-gray-600)'; label.style.alignSelf='center';
+      layerGroup.appendChild(label);
+      ['All'].concat(products).forEach(name=>{
+        const p = document.createElement('button');
+        p.type='button';
+        p.className = 'pill' + ((state.layer===null && name==='All') || state.layer===name ? ' active':'' );
+        p.textContent=name; p.addEventListener('click', ()=>{ state.layer = (name==='All')? null : name; render(); });
+        layerGroup.appendChild(p);
+      });
+      filtersEl.appendChild(layerGroup);
+      // Then month + city filters
+      months.forEach(m=>filtersEl.appendChild(makePill(m)));
+      cities.forEach(c=>filtersEl.appendChild(makePill(c)));
+    }
+  }
+
+  function makePill(name){
+    const btn = document.createElement('button');
+    btn.type='button';
+    btn.textContent=name; btn.className='pill'+(state.filters.has(name)?' active':'');
+    btn.addEventListener('click', ()=>{ state.filters.has(name)? state.filters.delete(name): state.filters.add(name); render(); });
+    return btn;
+  }
+
+  function isDimmed1D(m){
+    if(state.filters.size===0) return false; // no filter -> nothing dim
+    return !state.filters.has(m);
+  }
+
+  function render1D(){
+    // Build the data table with explicit column widths
+    const tbl = document.createElement('table');
+    tbl.className='matrix matrix-1d';
+    tbl.innerHTML = `
+      <colgroup>
+        <col class="col-month" />
+        <col class="col-sales" />
+      </colgroup>
+      <thead><tr><th>Month</th><th>Sales</th></tr></thead>`;
+    const body = document.createElement('tbody');
+    const selectedMonths = months.filter(m=>state.filters.has(m));
+    const hasAny = selectedMonths.length>0;
+    data.oneD.forEach(r=>{
+      const tr = document.createElement('tr');
+      const dim = isDimmed1D(r.month);
+      tr.innerHTML = `<th class="stub ${dim?'dim':''}">${r.month}</th><td class="cell ${dim?'dim sel-off':''}">${r.sales}</td>`;
+      if(!dim && state.filters.size>0){ tr.querySelector('.cell').classList.add('sel'); }
+      body.appendChild(tr);
+    });
+    tbl.appendChild(body);
+
+    // Layout wrapper for table + calculation column
+    const wrap = document.createElement('div'); wrap.className='data-wrap';
+    wrap.appendChild(tbl);
+
+    // Build calculation table based on toggle (even with no filters)
+    if(state.showCalc){
+      const calcTbl = document.createElement('table'); calcTbl.className='calc-table';
+      calcTbl.innerHTML = `<thead><tr><th>Calculation</th></tr></thead>`;
+      const cbody = document.createElement('tbody');
+      const ors = hasAny ? selectedMonths.map(x=>`Month = "${x}"`).join(' OR ') : '';
+      months.forEach(m=>{
+        const tr = document.createElement('tr');
+        const applies = hasAny ? selectedMonths.includes(m) : true;
+        const expr = hasAny ? `Month = "${m}" AND (${ors})` : `Month = "${m}"`;
+        const cls = applies ? 'calc-ok' : 'calc-no';
+        tr.innerHTML = `<td class="${cls}">${expr}</td>`;
+        cbody.appendChild(tr);
+      });
+      calcTbl.appendChild(cbody);
+      wrap.appendChild(calcTbl);
+    }
+
+    view.innerHTML=''; view.appendChild(wrap);
+
+    // Explain
+    const active = [...state.filters];
+    explain.innerHTML = makeExplain(
+      active.length? `Filter context includes <b>${active.join(', ')}</b>. Only those months remain active; all others are dimmed but visible so you can see total structure.` :
+      `No filters are applied. All months are active. Select one or more months to create a 1D filter context.`
+    );
+  }
+
+  function render2D(){
+    const tbl = document.createElement('table'); tbl.className='matrix';
+    // header
+    const thead = document.createElement('thead');
+    const hrow = document.createElement('tr');
+    const fCitiesHead = cities.filter(c=>state.filters.has(c));
+    const hasCityFilterHead = fCitiesHead.length>0;
+    hrow.innerHTML = '<th></th>' + cities.map(c=>{
+      const dimHead = hasCityFilterHead && !fCitiesHead.includes(c);
+      return `<th class="${dimHead? 'dim':''}">${c}</th>`;
+    }).join('');
+    thead.appendChild(hrow); tbl.appendChild(thead);
+
+    // determine filters
+    const fMonths = months.filter(m=>state.filters.has(m));
+    const fCities = cities.filter(c=>state.filters.has(c));
+    const hasAny = state.filters.size>0;
+
+    const body = document.createElement('tbody');
+    data.twoD.forEach(r=>{
+      const rowSel = fMonths.length? fMonths.includes(r.month): true;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<th class="stub ${fMonths.length && !rowSel ? 'dim' : ''}">${r.month}</th>` + cities.map(c=>{
+        const colSel = fCities.length? fCities.includes(c): true;
+        const isTuple = (hasAny && rowSel && colSel);
+        const dim = hasAny && !(rowSel && colSel);
+        const cls = `cell ${isTuple? 'tuple sel':''} ${dim? 'dim':''}`;
+        return `<td class="${cls}" data-month="${r.month}" data-city="${c}">${r.cities[c]}</td>`;
+      }).join('');
+      body.appendChild(tr);
+    });
+    tbl.appendChild(body);
+    view.innerHTML=''; view.appendChild(tbl);
+
+    // Explain
+    let desc = '';
+    if(!hasAny){
+      desc = 'No filters are applied. All cells are active. Select a month, a city, or both to form tuples (Date ∩ City).';
+    } else if(fMonths.length && fCities.length){
+      desc = `Rows filtered to <b>${fMonths.join(', ')}</b> and columns to <b>${fCities.join(', ')}</b>. Golden cells show tuple intersections where both conditions hold.`;
+    } else if(fMonths.length){
+      desc = `Rows filtered to <b>${fMonths.join(', ')}</b>. All columns remain active; the highlighted row cells form the active context.`;
+    } else {
+      desc = `Columns filtered to <b>${fCities.join(', ')}</b>. All rows remain active; the highlighted column cells form the active context.`;
+    }
+    explain.innerHTML = makeExplain(desc);
+  }
+
+  function render3D(){
+    // 3D is shown as stacked 2D matrices (one per product layer)
+    const wrap = document.createElement('div'); wrap.className='cube';
+    const activeLayerNames = state.layer? [state.layer] : products;
+
+    activeLayerNames.forEach(p =>{
+      const layer = data.threeD.find(x=>x.product===p);
+
+      const row = document.createElement('div'); row.className='cube-layer';
+      const badge = document.createElement('div'); badge.className='layer-badge'; badge.textContent=p; row.appendChild(badge);
+
+      const gridWrap = document.createElement('div'); gridWrap.className='layer-grid';
+      const tbl = document.createElement('table'); tbl.className='matrix';
+
+      // header
+      const thead = document.createElement('thead');
+      const hrow = document.createElement('tr');
+      const fCitiesHead = cities.filter(c=>state.filters.has(c));
+      const hasCityFilterHead = fCitiesHead.length>0;
+      hrow.innerHTML = '<th></th>' + cities.map(c=>{
+        const dimHead = hasCityFilterHead && !fCitiesHead.includes(c);
+        return `<th class="${dimHead? 'dim':''}">${c}</th>`;
+      }).join('');
+      thead.appendChild(hrow); tbl.appendChild(thead);
+
+      // filters
+      const fMonths = months.filter(m=>state.filters.has(m));
+      const fCities = cities.filter(c=>state.filters.has(c));
+      const hasAny = (fMonths.length + fCities.length) > 0;
+
+      const body = document.createElement('tbody');
+      layer.grid.forEach(r=>{
+        const rowSel = fMonths.length? fMonths.includes(r.month): true;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<th class="stub ${fMonths.length && !rowSel ? 'dim' : ''}">${r.month}</th>` + cities.map(c=>{
+          const colSel = fCities.length? fCities.includes(c): true;
+          const isTuple = (hasAny && rowSel && colSel);
+          const dim = hasAny && !(rowSel && colSel);
+          const cls = `cell ${isTuple? 'tuple sel':''} ${dim? 'dim':''}`;
+          return `<td class="${cls}" data-month="${r.month}" data-city="${c}" data-product="${p}">${r.cities[c]}</td>`;
+        }).join('');
+        body.appendChild(tr);
+      });
+      tbl.appendChild(body);
+      gridWrap.appendChild(tbl);
+      row.appendChild(gridWrap);
+      wrap.appendChild(row);
+    });
+
+    view.innerHTML=''; view.appendChild(wrap);
+
+    // Explain
+    const fMonths = months.filter(m=>state.filters.has(m));
+    const fCities = cities.filter(c=>state.filters.has(c));
+    const layerTxt = state.layer? ` for <b>${state.layer}</b>` : ' across all product layers';
+    let desc = '';
+    if(fMonths.length===0 && fCities.length===0){
+      desc = `No filters are applied${layerTxt}. Every layer shows full data. Choose Month(s), City(ies), and optionally a Product layer to see 3D tuples (Date ∩ City ∩ Product).`;
+    } else {
+      const a = fMonths.length? `Date ∈ <b>${fMonths.join(', ')}</b>` : 'all Dates';
+      const b = fCities.length? `City ∈ <b>${fCities.join(', ')}</b>` : 'all Cities';
+      const c = state.layer? `Product = <b>${state.layer}</b>` : 'all Products';
+      desc = `Active 3D filter context: ${a}; ${b}; ${c}. Highlighted cells mark tuple intersections where all selected conditions hold.`;
+    }
+    explain.innerHTML = makeExplain(desc);
+  }
+
+  function makeExplain(html){
+    return `<p style="line-height:1.55">${html}</p>
+            <hr style="border:none;border-top:1px solid var(--ps-gray-100); margin:12px 0"/>
+            <p style="margin:0;color:var(--muted);font-size:12px">In Power BI terms, the highlighted cells represent the rows included by the current filter context. Dimmed cells remain visible to help you reason about the total shape of the dataset.</p>`;
+  }
+
+  function render(){
+    renderFilters();
+    if(state.scenario==='1d') render1D();
+    else if(state.scenario==='2d') render2D();
+    else render3D();
+  }
+
+  // init
+  render();
+})();
+</script>
+</body>
+</html>

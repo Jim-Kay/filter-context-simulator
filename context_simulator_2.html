@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Power BI Filter Context Simulator</title>
+  <style>
+    :root{--bg:#0f172a;--panel:#111827ee;--muted:#94a3b8;--text:#e5e7eb;--accent:#22d3ee;--ok:#34d399;--border:#1f2937;--header-bg:#0b1223cc;--button-bg:#0b1223;--node-stroke:#334155;--link:#94a3b8;--input-bg:#0b1223;--label-stroke:#0b1223;--fact:#0a2f3f;--dim:#0b1223;--bridge:#2f1a0a;--warn:#f59e0b;--danger:#ef4444}
+    body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;background:radial-gradient(1200px 800px at 70% -20%, #1f2937, var(--bg));color:var(--text);height:100vh;display:flex;flex-direction:column}
+    header{display:flex;align-items:center;gap:.5rem;padding:.6rem 1rem;background:var(--header-bg);border-bottom:1px solid var(--border)}
+    header h1{font-size:1rem;font-weight:700;margin:0 .5rem 0 0}
+    .toolbar{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+    button{background:var(--button-bg);border:1px solid var(--border);color:var(--text);padding:.4rem .7rem;border-radius:.5rem;cursor:pointer}
+    button.warn{background:linear-gradient(180deg,#f59e0b,#d97706)}
+    #stage{flex:1;position:relative}
+    svg{width:100%;height:100%}
+    .panel{position:absolute;right:12px;top:12px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:.75rem;max-width:360px}
+    .panel h3{margin:.2rem 0;font-size:.95rem}
+    .panel li{color:var(--muted);font-size:.85rem}
+    .panel .panel-close{position:absolute;right:8px;top:8px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--node-stroke);background:var(--button-bg);color:var(--muted);border-radius:6px;cursor:pointer;line-height:1}
+    .floating-btn{position:absolute;left:12px;top:12px;z-index:20;display:none}
+    .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:10px;padding:.4rem .7rem;background:var(--panel);border:1px solid var(--border);border-radius:.5rem;color:var(--muted)}
+    /* Context menu for link actions */
+    .ctx-menu{position:absolute;z-index:50;min-width:180px;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:6px}
+    .ctx-menu .item{display:flex;align-items:center;gap:.5rem;width:100%;padding:.45rem .6rem;border:none;background:transparent;color:var(--text);cursor:pointer;border-radius:8px;text-align:left;font-size:.9rem}
+    .ctx-menu .item:hover{background:rgba(148,163,184,.15)}
+    .ctx-menu .danger{color:var(--danger);font-weight:700}
+    .ctx-menu .sep{height:1px;margin:4px 0;background:var(--border)}
+    #exampleDesc{margin-top:.6rem;font-size:.8rem;color:var(--text)}
+    .node-rect{fill:#0b1223;stroke:var(--node-stroke);stroke-width:2px;rx:12px;ry:12px}
+    /* In light mode we use fills for selection/reach; keep stroke color by type. No border change needed here. */
+    .node text{fill:var(--text);font-size:12px;font-weight:700;pointer-events:none}
+    .link{stroke:var(--link);stroke-width:2px}
+    .link.nonselective{stroke:var(--danger);stroke-width:2.5px}
+    .link.ambiguous{stroke:var(--warn);stroke-width:2.5px}
+    .link.inactive{stroke-dasharray:4 3;opacity:.55}
+    .rename-input{font-size:12px;padding:2px 4px;border:1px solid var(--node-stroke);border-radius:6px;background:var(--input-bg);color:var(--text)}
+    .link-label{fill:#e5e7eb;font-size:11px;font-weight:700;paint-order:stroke;stroke:var(--label-stroke);stroke-width:4px;pointer-events:auto;cursor:pointer}
+    path.mid{cursor:pointer; fill: var(--link)}
+    /* Ensure arrowheads match link color */
+    #svg defs #arrow path, #svg defs #arrow-start path{ fill: var(--link); }
+    /* Light theme overrides via class on <html> */
+    .light{--bg:#f8fafc;--panel:#ffffffee;--muted:#475569;--text:#0f172a;--accent:#2563eb;--ok:#16a34a;--border:#cbd5e1;--header-bg:#e2e8f0cc;--button-bg:#ffffff;--node-stroke:#cbd5e1;--link:#64748b;--input-bg:#ffffff;--label-stroke:#ffffff;--fact:#ffffff;--dim:#ffffff;--bridge:#ffffff;--warn:#d97706;--danger:#dc2626;--sel-fill:#fef3c7;--reach-fill:#dcfce7;--box-blue:#0ea5e9;--box-green:#22c55e;--box-orange:#f59e0b;--box-purple:#8b5cf6}
+    .light #exampleSelect{background:#ffffff !important;border-color:#cbd5e1 !important;color:var(--text) !important}
+    /* Light mode visuals to match reference diagram */
+    .light body{background:#ffffff}
+    .light .node-rect{fill:#ffffff; stroke-width:2.5px}
+    .light .link-label{fill:#64748b}
+
+    /* Legend styles */
+    .legend{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+    .legend .item{display:inline-flex;align-items:center;font-size:.8rem;color:var(--text)}
+    .legend .sw{width:18px;height:12px;border:2.5px solid currentColor;border-radius:8px;margin-right:.4rem;background:transparent}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Filter Context Simulator</h1>
+    <div class="toolbar">
+      <button id="addTableBtn">+ Add table</button>
+      <button id="connectBtn">🔗 Connect</button>
+      <button id="autoLayoutBtn">♻ Auto‑layout</button>
+      <button id="resetBtn" class="warn">🧹 Reset</button>
+      <label style="display:flex;align-items:center;gap:.4rem;margin-left:.5rem">
+        <span style="opacity:.8">Examples:</span>
+        <select id="exampleSelect" style="background:#0b1223;border:1px solid #1f2937;color:var(--text);padding:.35rem .5rem;border-radius:.4rem">
+          <option value="star">Regular star</option>
+          <option value="snowflake">Snowflake dimension</option>
+          <option value="ambiguousSnowflake">Ambiguous snowflake paths</option>
+          <option value="redundantBridge">Redundant path (direct + bridge)</option>
+          <option value="multiFacts">Multiple facts (shared dims)</option>
+          <option value="flatMulti">Flattened star with multiple facts</option>
+          <option value="bridge">Bridge table (many-to-many)</option>
+          <option value="roleDate">Role-playing Date (active/inactive)</option>
+          <option value="biDir">Bidirectional demo</option>
+          <option value="grainMismatch">FACT grain mismatch (daily vs monthly)</option>
+          <option value="manyToManyNoBridge">Many-to-many without bridge (problem)</option>
+          <option value="overBidirectionalLoop">Overuse of bidirectional (cross-dim bleed)</option>
+          <option value="dualActiveDates">Dual active date relationships (ambiguous)</option>
+          <option value="wrongDirectionSnowflake">Wrong direction in snowflake</option>
+          <!-- Insurance2 dataset scenarios -->
+          <option value="ins_pricing">Insurance: Policy Pricing (Star + Snowflake + Bridge)</option>
+          <option value="ins_auto">Insurance: Auto Claims (Policy + Vehicle + Customer via Bridge)</option>
+          <option value="ins_life">Insurance: Life Claims (Policy + Customer via Bridge)</option>
+          <option value="ins_exposure">Insurance: Exposure Monthly (Customer–Policy coverage)</option>
+          <option value="ins_full">Insurance: Full model (all tables)</option>
+        </select>
+        <button id="loadExampleBtn">Load</button>
+      </label>
+      <button id="helpBtn" title="Toggle help (instructions)">❓ Help</button>
+      <button id="infoBtn" title="Toggle model info">ℹ Info</button>
+      <button id="advancedBtn" title="Toggle advanced mode">⚙ Advanced: Off</button>
+      <button id="fullScreenBtn" title="Enter full screen">⛶ Full screen</button>
+      <button id="themeBtn" title="Toggle theme">🌗 Theme</button>
+      <button id="toggleToolbarBtn" title="Hide toolbar">▴ Hide toolbar</button>
+      <span id="modePill">Mode: Select</span>
+    </div>
+  </header>
+  <div id="stage">
+    <button id="showToolbarBtn" class="floating-btn">Show toolbar</button>
+    <svg id="svg" viewBox="0 0 1200 700"></svg>
+    <!-- Link context menu -->
+    <div id="linkContextMenu" class="ctx-menu" style="display:none">
+      <button type="button" id="ctxToggleActive" class="item">⏻ Toggle Active</button>
+      <button type="button" id="ctxCycleDir" class="item">🔁 Cycle Direction</button>
+      <div class="sep"></div>
+      <button type="button" id="ctxSetAtoB" class="item">A→B</button>
+      <button type="button" id="ctxSetBtoA" class="item">B→A</button>
+      <button type="button" id="ctxSetBoth" class="item">↔ Both</button>
+      <div class="sep"></div>
+      <button type="button" id="ctxDelete" class="item danger">🗑 Delete Link</button>
+    </div>
+    <aside id="helpPanel" class="panel" style="right:12px;top:12px;display:none">
+      <button id="helpClose" class="panel-close" aria-label="Close help" title="Close">×</button>
+      <h3>How it works</h3>
+      <ul>
+        <li>Click a table to see which tables receive its filter (green).</li>
+        <li>Connect mode: click source then target to add a relationship.</li>
+        <li>Click a link, mid symbol, or its number to cycle direction (A→B, B→A, both).</li>
+        <li>Press 1–9 (0 for 10) to toggle the link with that number.</li>
+        <li>Right‑click a link, mid symbol, or its number to open the context menu (activate/deactivate, set direction, delete).</li>
+        <li>Double‑click a table to rename.</li>
+        <li>Click empty canvas to clear selection.</li>
+      </ul>
+    </aside>
+    <aside id="infoPanel" class="panel" style="right:12px;top:12px">
+      <button id="infoClose" class="panel-close" aria-label="Close info" title="Close">×</button>
+      <h3 id="exampleName">Model</h3>
+      <div id="exampleDesc"></div>
+      <div id="selectionTitle" style="margin-top:.4rem;font-weight:700"></div>
+      <div id="contextNote" style="font-size:.85rem;color:var(--muted);margin:.25rem 0 .4rem"></div>
+      <div id="reachSummary" style="font-size:.85rem;margin-bottom:.35rem"></div>
+      <div id="tableNotes" style="font-size:.82rem;color:var(--muted);margin:.2rem 0 .3rem"></div>
+      <div id="measuresSection" style="margin-top:.25rem;display:none">
+        <div style="font-weight:700">Measures</div>
+        <ul id="measuresList" style="margin:.15rem 0 .25rem .95rem;padding:0"></ul>
+      </div>
+      <ul id="diagList" style="margin:.25rem 0 .25rem .95rem;padding:0"></ul>
+    </aside>
+    <aside id="legendPanel" class="panel" style="left:12px;bottom:12px;top:auto">
+      <div style="font-weight:700;margin-bottom:.25rem">Legend</div>
+      <div class="legend">
+        <div class="item" style="color: var(--box-blue)"><span class="sw"></span>Dim</div>
+        <div class="item" style="color: var(--box-green)"><span class="sw"></span>Fact</div>
+        <div class="item" style="color: var(--box-purple)"><span class="sw"></span>Bridge</div>
+        <div class="item" style="color: var(--muted)"><span class="sw" style="background: var(--sel-fill); border-color: var(--border)"></span>Selected</div>
+        <div class="item" style="color: var(--muted)"><span class="sw" style="background: var(--reach-fill); border-color: var(--border)"></span>Receives filter</div>
+      </div>
+    </aside>
+    <div class="toast" id="toast" style="display:none"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <script>
+  let nodes=[], links=[], idCounter=1, connectMode=false, pendingSource=null, linkHotkeys=[], keyboardBound=false;
+  let dimColorCounter = 0; // cycles border colors for dimensions in light mode
+  // Selection + diagnostics state
+  let selectedId = null;
+  let nonselectiveSet = new Set(); // link keys s>t
+  let ambiguousSet = new Set();    // link keys s>t
+  let advancedMode = false;
+  const svg=d3.select('#svg');
+  const defs=svg.append('defs');
+  defs.append('marker').attr('id','arrow')
+    .attr('viewBox','0 -5 10 10').attr('refX',14).attr('refY',0)
+    .attr('markerWidth',9).attr('markerHeight',9).attr('orient','auto')
+    .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','#e2e8f0');
+  defs.append('marker').attr('id','arrow-start')
+    .attr('viewBox','0 -5 10 10').attr('refX',0).attr('refY',0)
+    .attr('markerWidth',9).attr('markerHeight',9).attr('orient','auto-start-reverse')
+    .append('path').attr('d','M10,-5L0,0L10,5').attr('fill','#e2e8f0');
+
+  // Link context menu state and helpers
+  const stageEl = document.getElementById('stage');
+  const ctxMenuEl = document.getElementById('linkContextMenu');
+  let ctxMenuLink = null;
+  let ctxMenuBound = false;
+
+  function bindLinkContextMenuActions(){
+    if(ctxMenuBound || !ctxMenuEl) return;
+    const btnToggle = document.getElementById('ctxToggleActive');
+    const btnCycle  = document.getElementById('ctxCycleDir');
+    const btnAtoB   = document.getElementById('ctxSetAtoB');
+    const btnBtoA   = document.getElementById('ctxSetBtoA');
+    const btnBoth   = document.getElementById('ctxSetBoth');
+    const btnDelete = document.getElementById('ctxDelete');
+    if(btnToggle) btnToggle.addEventListener('click', ()=>{ if(!ctxMenuLink) return; ctxMenuLink.active = !ctxMenuLink.active; hideLinkContextMenu(); recompute(); });
+    if(btnCycle)  btnCycle.addEventListener('click', ()=>{ if(!ctxMenuLink) return; cycleDir(ctxMenuLink); hideLinkContextMenu(); recompute(); });
+    if(btnAtoB)   btnAtoB.addEventListener('click', ()=>{ if(!ctxMenuLink) return; ctxMenuLink.dir='AtoB'; hideLinkContextMenu(); recompute(); });
+    if(btnBtoA)   btnBtoA.addEventListener('click', ()=>{ if(!ctxMenuLink) return; ctxMenuLink.dir='BtoA'; hideLinkContextMenu(); recompute(); });
+    if(btnBoth)   btnBoth.addEventListener('click', ()=>{ if(!ctxMenuLink) return; ctxMenuLink.dir='Both'; hideLinkContextMenu(); recompute(); });
+    if(btnDelete) btnDelete.addEventListener('click', ()=>{
+      if(!ctxMenuLink) return;
+      const idx = links.indexOf(ctxMenuLink);
+      if(idx>=0){ links.splice(idx,1); }
+      hideLinkContextMenu();
+      render();
+      recompute();
+    });
+    // Close on outside click
+    document.addEventListener('click', (e)=>{
+      if(!ctxMenuEl || ctxMenuEl.style.display==='none') return;
+      if(!ctxMenuEl.contains(e.target)) hideLinkContextMenu();
+    });
+    // Close on Escape
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') hideLinkContextMenu(); });
+    ctxMenuBound = true;
+  }
+
+  function showLinkContextMenu(e, link){
+    bindLinkContextMenuActions();
+    if(!ctxMenuEl) return;
+    e.preventDefault();
+    e.stopPropagation();
+    ctxMenuLink = link;
+    // Update toggle label to reflect state
+    const btnToggle = document.getElementById('ctxToggleActive');
+    if(btnToggle){ btnToggle.textContent = (link && link.active) ? '⏻ Deactivate' : '⏻ Activate'; }
+    // Show and position relative to #stage
+    ctxMenuEl.style.display = 'block';
+    // Initial positioning to compute size
+    let x = 0, y = 0;
+    const rect = stageEl.getBoundingClientRect();
+    x = e.clientX - rect.left; y = e.clientY - rect.top;
+    // Clamp within stage bounds
+    const mw = ctxMenuEl.offsetWidth || 200;
+    const mh = ctxMenuEl.offsetHeight || 220;
+    const maxX = Math.max(0, stageEl.clientWidth - mw - 2);
+    const maxY = Math.max(0, stageEl.clientHeight - mh - 2);
+    const left = Math.min(Math.max(0, x), maxX);
+    const top  = Math.min(Math.max(0, y), maxY);
+    ctxMenuEl.style.left = left + 'px';
+    ctxMenuEl.style.top  = top + 'px';
+  }
+
+  function hideLinkContextMenu(){
+    if(ctxMenuEl){ ctxMenuEl.style.display='none'; }
+    ctxMenuLink = null;
+  }
+
+  // Granularity hatch patterns (low vs high). Each pattern tiles a dark background with subtle diagonal strokes.
+  defs.append('pattern')
+    .attr('id','hatch-low')
+    .attr('patternUnits','userSpaceOnUse')
+    .attr('width',8).attr('height',8)
+    .append('g')
+      .call(g=>{
+        g.append('rect').attr('width',8).attr('height',8).attr('fill','#0b1223');
+        g.append('path').attr('d','M0,8 l8,-8 M-2,6 l4,-4 M6,10 l4,-4')
+          .attr('stroke','#64748b') // slate-500 for dimensions (low granularity)
+          .attr('stroke-width',1.1).attr('opacity',0.55).attr('fill','none');
+      });
+  defs.append('pattern')
+    .attr('id','hatch-high')
+    .attr('patternUnits','userSpaceOnUse')
+    .attr('width',4).attr('height',4)
+    .append('g')
+      .call(g=>{
+        g.append('rect').attr('width',4).attr('height',4).attr('fill','#0b1223');
+        g.append('path').attr('d','M0,4 l4,-4 M-1,3 l2,-2 M3,5 l2,-2')
+          .attr('stroke','#22d3ee') // accent for facts (high granularity)
+          .attr('stroke-width',1.2).attr('opacity',0.6).attr('fill','none');
+      });
+
+  const container=svg.append('g');
+  const linkLayer=container.append('g');
+  const midLayer=container.append('g');
+  const nodeLayer=container.append('g');
+  svg.call(d3.zoom().scaleExtent([.2,3]).on('zoom',e=>container.attr('transform',e.transform)));
+  // Clicking on empty canvas (anywhere on the SVG outside interactive elements) clears selection
+  svg.on('click', (e)=>{ clearSelection(); });
+
+  const sim=d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d=>d.id).distance(150))
+    .force('charge', d3.forceManyBody().strength(-350))
+    .force('center', d3.forceCenter(600,350))
+    .force('collision', d3.forceCollide().radius(d=>Math.max(d.width, d.height)/2 + 12));
+
+  document.getElementById('addTableBtn').onclick=()=>addNode();
+  document.getElementById('connectBtn').onclick=()=>toggleConnectMode();
+  document.getElementById('autoLayoutBtn').onclick=()=>sim.alpha(1).restart();
+  document.getElementById('resetBtn').onclick=()=>{nodes.length=0;links.length=0;idCounter=1;render();};
+  document.getElementById('loadExampleBtn').onclick=()=>{const key=document.getElementById('exampleSelect').value;loadExample(key);};
+  document.getElementById('helpBtn').onclick=()=>toggleVisible('helpPanel');
+  document.getElementById('infoBtn').onclick=()=>toggleVisible('infoPanel');
+  // Theme toggle with persistence
+  (function(){
+    const saved = localStorage.getItem('fcs-theme');
+    if(saved==='light'){ document.documentElement.classList.add('light'); }
+    updateThemeButtonLabel();
+    // Advanced mode persistence
+    const adv = localStorage.getItem('fcs-advanced');
+    advancedMode = !!adv;
+    updateAdvancedButtonLabel();
+  })();
+  document.getElementById('themeBtn').onclick=()=>{
+    const root = document.documentElement;
+    const isLight = root.classList.toggle('light');
+    localStorage.setItem('fcs-theme', isLight ? 'light' : 'dark');
+    // Re-apply node colors based on theme variables
+    renderNodes();
+    updateThemeButtonLabel();
+  };
+  function updateThemeButtonLabel(){
+    const root = document.documentElement;
+    const btn = document.getElementById('themeBtn'); if(!btn) return;
+    const light = root.classList.contains('light');
+    btn.textContent = light ? '🌞 Light mode' : '🌙 Dark mode';
+    btn.title = 'Toggle theme';
+    // Apply state-dependent fills (selected/reachable)
+    const currentReach = selectedId ? reachableFrom(selectedId) : null;
+    if(currentReach) currentReach.delete(selectedId);
+    updateNodeFills(currentReach);
+  }
+
+  function updateNodeFills(reachSet){
+    const root = document.documentElement;
+    const light = root.classList.contains('light');
+    const styles = getComputedStyle(root);
+    const sel = (styles.getPropertyValue('--sel-fill').trim() || '#fef3c7');
+    const reach = (styles.getPropertyValue('--reach-fill').trim() || '#dcfce7');
+    nodeLayer.selectAll('g.node rect.node-rect').style('fill', d=>{
+      if(light){
+        if(d.id===selectedId) return sel;
+        if(reachSet && reachSet.has(d.id)) return reach;
+        return '#ffffff';
+      }
+      return colorForNode(d);
+    });
+  }
+  function updateAdvancedButtonLabel(){
+    const btn = document.getElementById('advancedBtn'); if(!btn) return;
+    btn.textContent = `⚙ Advanced: ${advancedMode ? 'On' : 'Off'}`;
+    btn.title = 'Toggle advanced mode';
+  }
+  // Fullscreen toggle button
+  document.getElementById('fullScreenBtn').onclick=()=>{
+    const btn = document.getElementById('fullScreenBtn');
+    const elem = document.documentElement;
+    const enter = ()=>{
+      if(elem.requestFullscreen) return elem.requestFullscreen();
+      if(elem.webkitRequestFullscreen) return elem.webkitRequestFullscreen();
+      if(elem.msRequestFullscreen) return elem.msRequestFullscreen();
+    };
+    const exit = ()=>{
+      if(document.exitFullscreen) return document.exitFullscreen();
+      if(document.webkitExitFullscreen) return document.webkitExitFullscreen();
+      if(document.msExitFullscreen) return document.msExitFullscreen();
+    };
+    if(!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement){ enter(); }
+    else { exit(); }
+  };
+  // Update label on fullscreen changes
+  document.addEventListener('fullscreenchange', ()=>{
+    const fs = !!document.fullscreenElement;
+    const btn = document.getElementById('fullScreenBtn'); if(!btn) return;
+    btn.textContent = fs ? '⛶ Exit full screen' : '⛶ Full screen';
+    btn.title = fs ? 'Exit full screen' : 'Enter full screen';
+  });
+  // Ensure Escape exits (most browsers handle this by default)
+  document.addEventListener('keydown', (e)=>{
+    if(e.key==='Escape'){
+      if(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement){
+        if(document.exitFullscreen) document.exitFullscreen();
+        else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+        else if(document.msExitFullscreen) document.msExitFullscreen();
+      }
+    }
+  });
+  document.getElementById('toggleToolbarBtn').onclick=()=>{
+    const headerEl = document.querySelector('header');
+    const showBtn = document.getElementById('showToolbarBtn');
+    if(headerEl){ headerEl.style.display='none'; }
+    if(showBtn){ showBtn.style.display='inline-block'; }
+  };
+  document.getElementById('showToolbarBtn').onclick=()=>{
+    const headerEl = document.querySelector('header');
+    const showBtn = document.getElementById('showToolbarBtn');
+    if(headerEl){ headerEl.style.display=''; }
+    if(showBtn){ showBtn.style.display='none'; }
+  };
+  // Close buttons on panels
+  document.getElementById('helpClose').onclick=()=>{ document.getElementById('helpPanel').style.display='none'; };
+  document.getElementById('infoClose').onclick=()=>{ document.getElementById('infoPanel').style.display='none'; };
+
+  document.getElementById('advancedBtn').onclick=()=>{
+    advancedMode = !advancedMode;
+    if(advancedMode) localStorage.setItem('fcs-advanced','1'); else localStorage.removeItem('fcs-advanced');
+    updateAdvancedButtonLabel();
+    updateInfoPanel();
+    renderNodes();
+  };
+
+  function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>el.style.display='none',1500);}
+  function toggleConnectMode(){connectMode=!connectMode;pendingSource=null;document.getElementById('modePill').textContent='Mode: '+(connectMode?'Connect':'Select');}
+  function toggleVisible(id){
+    const el = document.getElementById(id);
+    const other = id==='helpPanel' ? document.getElementById('infoPanel') : (id==='infoPanel' ? document.getElementById('helpPanel') : null);
+    const isShown = getComputedStyle(el).display !== 'none';
+    if(isShown){
+      el.style.display = 'none';
+    } else {
+      if(other) other.style.display = 'none';
+      el.style.display = '';
+    }
+  }
+  function clearSelection(){
+    selectedId = null;
+    recompute(); // also refresh fills and diagnostics
+  }
+  function addNode(name){
+    const n={id:'T'+(idCounter++),name:(name||('Table '+idCounter)),x:500,y:300,width:120,height:50,gran:'low'};
+    // Assign palette index for dims so borders cycle in light mode
+    if(nodeType(n)==='dim'){ n.strokeIdx = dimColorCounter++; }
+    nodes.push(n);
+    render();
+    toast('Added '+n.name);
+  }
+  function addLink(a,b){if(!a||!b||a===b)return;links.push({source:a.id,target:b.id,dir:'AtoB',active:true});render();}
+  function cycleDir(d){ d.dir = d.dir==='AtoB' ? 'BtoA' : (d.dir==='BtoA' ? 'Both' : 'AtoB'); }
+  function linkKeyObj(d){ const s=d.source.id||d.source; const t=d.target.id||d.target; return s+">"+t; }
+
+  function inferGranularity(name){ return /(^|\b)fact/i.test(name) ? 'high' : 'low'; }
+  function colorForGran(gran){
+    // Use CSS custom properties so theme switch updates colors
+    const styles = getComputedStyle(document.documentElement);
+    const fact = styles.getPropertyValue('--fact').trim() || '#0a2f3f';
+    const dim  = styles.getPropertyValue('--dim').trim()  || '#0b1223';
+    return gran==='high' ? fact : dim;
+  }
+
+  function colorForNode(n){
+    const styles = getComputedStyle(document.documentElement);
+    const fact = styles.getPropertyValue('--fact').trim() || '#0a2f3f';
+    const dim  = styles.getPropertyValue('--dim').trim()  || '#0b1223';
+    const bridge = styles.getPropertyValue('--bridge').trim() || '#2f1a0a';
+    const t = nodeType(n);
+    if(t==='fact') return fact;
+    if(t==='bridge') return bridge;
+    return dim;
+  }
+
+  // In light mode, draw colored borders matching the sample palette
+  function strokeColorForNode(n){
+    const root = document.documentElement;
+    if(!root.classList.contains('light')) return null; // let CSS take over in dark
+    const styles = getComputedStyle(root);
+    const getVar = (name, fallback)=> (styles.getPropertyValue(name).trim() || fallback);
+    const blue   = getVar('--box-blue','#0ea5e9');
+    const green  = getVar('--box-green','#22c55e');
+    const purple = getVar('--box-purple','#8b5cf6');
+    const t = nodeType(n);
+    if(t==='fact') return green;
+    if(t==='bridge') return purple;
+    return blue; // all dimensions share a single blue border color
+  }
+
+  function render(){sim.nodes(nodes);sim.force('link').links(links);sim.alpha(1).restart();renderLinks();renderNodes();}
+
+  function renderLinks(){
+    const key=d=>(d.source.id||d.source)+'>'+(d.target.id||d.target);
+    const sel=linkLayer.selectAll('line.link').data(links,key);
+    sel.exit().remove();
+    const ent=sel.enter().append('line').attr('class','link')
+      .on('click',(e,d)=>{e.stopPropagation();cycleDir(d);recompute();})
+      .on('contextmenu',(e,d)=>{ showLinkContextMenu(e,d); });
+    sel.merge(ent)
+      .attr('class',d=>'link'+(d.active?'':' inactive'))
+      .attr('marker-end',d=>(d.active&&(d.dir==='AtoB'||d.dir==='Both'))?'url(#arrow)':null)
+      .attr('marker-start',d=>(d.active&&(d.dir==='BtoA'||d.dir==='Both'))?'url(#arrow-start)':null);
+    const m=midLayer.selectAll('path.mid').data(links,key);
+    m.exit().remove();
+    const mEnt=m.enter().append('path').attr('class','mid').attr('opacity',0.85);
+    m.merge(mEnt)
+      .attr('d',d=> d.dir==='Both'
+        ? 'M -7 -4 L 0 0 L -7 4 Z M 7 -4 L 0 0 L 7 4 Z'  // double-headed chevron for bi-directional
+        : 'M -7 -4 L 7 0 L -7 4 Z'                       // single triangle for one-way
+      )
+      .attr('fill', null)
+      .on('click',(e,d)=>{ e.stopPropagation(); cycleDir(d); recompute(); })
+      .on('contextmenu',(e,d)=>{ showLinkContextMenu(e,d); });
+
+    // Labels with numeric hotkeys (1-9, 0 for 10)
+    const labeled = links.map((l,i)=>({ link:l, idx:i+1 }));
+    const labels = midLayer.selectAll('text.link-label').data(labeled, d=> (d.link.source.id||d.link.source)+'>'+(d.link.target.id||d.link.target));
+    labels.exit().remove();
+    const labelsEnt = labels.enter().append('text').attr('class','link-label').attr('text-anchor','middle');
+    labels.merge(labelsEnt)
+      .text(d=> String(d.idx))
+      .on('click',(e,d)=>{ e.stopPropagation(); cycleDir(d.link); recompute(); })
+      .on('contextmenu',(e,d)=>{ showLinkContextMenu(e, d.link); });
+
+    // Prepare hotkey mapping for first 10 links
+    linkHotkeys = links.slice(0,10);
+    if(!keyboardBound){
+      document.addEventListener('keydown', (e)=>{
+        if(!linkHotkeys || !linkHotkeys.length) return;
+        const ae=document.activeElement; if(ae && (ae.tagName==='INPUT' || ae.tagName==='TEXTAREA' || ae.isContentEditable)) return;
+        let idx=null; if(e.key>='1' && e.key<='9') idx=parseInt(e.key,10); else if(e.key==='0') idx=10;
+        if(idx){ const link=linkHotkeys[idx-1]; if(link){ cycleDir(link); recompute(); toast('Toggled link #'+idx+' → '+link.dir); } }
+      });
+      keyboardBound=true;
+    }
+  }
+
+  function renderNodes(){
+    const sel=nodeLayer.selectAll('g.node').data(nodes,d=>d.id);
+    sel.exit().remove();
+    const ent=sel.enter().append('g').attr('class','node')
+      .call(d3.drag().on('start',dragstarted).on('drag',dragged).on('end',dragended))
+      .on('click',(e,d)=>{e.stopPropagation(); if(connectMode){if(!pendingSource){pendingSource=d;toast('Select target…');}else{addLink(pendingSource,d);pendingSource=null;toggleConnectMode();}return;} selectNode(d.id);})
+      .on('dblclick',(e,d)=>{const input=document.createElement('input');input.type='text';input.value=d.name;input.className='rename-input';input.style.position='absolute';input.style.left=(d.x)+'px';input.style.top=(d.y)+'px';document.body.appendChild(input);input.focus();input.onblur=()=>{d.name=input.value; /* re-infer if not manually set */ if(!d._manualGran) d.gran = inferGranularity(d.name); document.body.removeChild(input);renderNodes();};input.onkeydown=ev=>{if(ev.key==='Enter')input.blur();}});
+    ent.append('rect').attr('class','node-rect').attr('width',d=>d.width).attr('height',d=>d.height).attr('x',d=>-d.width/2).attr('y',d=>-d.height/2)
+      .style('fill', d=> colorForNode(d))
+      .style('--node-stroke', d=> strokeColorForNode(d) || null);
+    ent.append('text').attr('text-anchor','middle').attr('dy','0.35em').text(d=>d.name);
+    // Type badge (D/F/B)
+    const b = ent.append('g').attr('class','badge');
+    b.append('rect').attr('rx',3).attr('ry',3);
+    b.append('text').attr('text-anchor','middle').attr('dy','0.9em').style('font-size','10px').style('font-weight','800').style('fill','#ffffff');
+    nodeLayer.selectAll('g.node text').text(d=>d.name);
+    nodeLayer.selectAll('g.node rect.node-rect')
+      .style('fill', d=> colorForNode(d))
+      .style('--node-stroke', d=> strokeColorForNode(d) || null);
+
+    // Auto-size node rectangles to fit text width with padding
+    let anyChanged=false;
+    nodeLayer.selectAll('g.node').each(function(d){
+      const textEl = d3.select(this).select('text').node();
+      if(!textEl) return;
+      const bbox = textEl.getBBox();
+      const minW = 120, padX = 24; // 12px padding on each side
+      const newW = Math.max(minW, bbox.width + padX);
+      if(newW !== d.width){
+        d.width = newW;
+        d3.select(this).select('rect')
+          .attr('width', d.width)
+          .attr('x', -d.width/2);
+        anyChanged = true;
+      }
+    });
+    if(anyChanged){
+      // Update collision radius to reflect new sizes
+      sim.force('collision').radius(d=>Math.max(d.width, d.height)/2 + 12);
+      sim.alpha(0.3).restart();
+    }
+
+    // Update badge position and style
+    nodeLayer.selectAll('g.node').each(function(d){
+      const g = d3.select(this).select('g.badge'); if(g.empty()) return;
+      const x = -d.width/2 + 6, y = -d.height/2 + 6, w=18, h=14;
+      const t = nodeType(d);
+      g.select('rect').attr('x', x).attr('y', y).attr('width', w).attr('height', h).attr('fill', badgeColor(t));
+      g.select('text').attr('x', x + w/2).attr('y', y + 1).text(badgeLabel(t));
+      // Hide badge in Advanced off? Keep always visible for learning cues
+    });
+  }
+
+  function nodeType(n){ if(n.type) return n.type; if(n.role==='bridge') return 'bridge'; const g=(n.gran||inferGranularity(n.name)); return g==='high' ? 'fact' : 'dim'; }
+  function badgeLabel(t){ return t==='fact' ? 'F' : (t==='bridge' ? 'B' : 'D'); }
+  function badgeColor(t){
+    // Use theme variables
+    const styles = getComputedStyle(document.documentElement);
+    const accent = styles.getPropertyValue('--accent').trim() || '#22d3ee';
+    const muted  = styles.getPropertyValue('--muted').trim()  || '#94a3b8';
+    const warn   = styles.getPropertyValue('--warn').trim()   || '#f59e0b';
+    return t==='fact' ? accent : (t==='bridge' ? warn : muted);
+  }
+
+  function highlightFrom(startId){
+    const seen=new Set([startId]);
+    const adj=new Map(); nodes.forEach(n=>adj.set(n.id,[]));
+    links.forEach(l=>{ if(!l.active) return; const s=l.source.id||l.source, t=l.target.id||l.target; if(l.dir==='AtoB'){adj.get(s).push(t);} else if(l.dir==='BtoA'){adj.get(t).push(s);} else {adj.get(s).push(t);adj.get(t).push(s);} });
+    const q=[startId];
+    while(q.length){ const u=q.shift(); for(const v of (adj.get(u)||[])){ if(!seen.has(v)){ seen.add(v); q.push(v); } } }
+    nodeLayer.selectAll('g.node').classed('selected',d=>d.id===startId).classed('reachable',d=>seen.has(d.id)&&d.id!==startId);
+  }
+
+  // Selection + diagnostics orchestrator
+  function selectNode(id){ selectedId = id; recompute(); }
+
+  function applyLinkClasses(){
+    linkLayer.selectAll('line.link')
+      .classed('nonselective', d=> nonselectiveSet.has(linkKeyObj(d)))
+      .classed('ambiguous', d=> ambiguousSet.has(linkKeyObj(d)));
+  }
+
+  function buildAdjacency(){
+    const adj = new Map(); nodes.forEach(n=>adj.set(n.id, new Set()));
+    links.forEach(l=>{
+      if(!l.active) return; const s=l.source.id||l.source, t=l.target.id||l.target;
+      if(l.dir==='AtoB' || l.dir==='Both') adj.get(s).add(t);
+      if(l.dir==='BtoA' || l.dir==='Both') adj.get(t).add(s);
+    });
+    // Convert Sets to arrays
+    for(const [k,v] of adj) adj.set(k, Array.from(v));
+    return adj;
+  }
+
+  function reachableFrom(startId){
+    const adj = buildAdjacency();
+    const seen = new Set([startId]); const q=[startId];
+    while(q.length){ const u=q.shift(); for(const v of (adj.get(u)||[])){ if(!seen.has(v)){ seen.add(v); q.push(v); } } }
+    return seen;
+  }
+
+  function computeNonselective(){
+    const set = new Set();
+    links.forEach(l=>{
+      const card = l.cardinality || l.card; // optional metadata
+      if(card === '*:*') set.add(linkKeyObj(l));
+      // Treat bidirectional filters as risky/non-selective for teaching purposes
+      if(l.dir === 'Both' && l.active) set.add(linkKeyObj(l));
+    });
+    return set;
+  }
+
+  function computeAmbiguity(startId){
+    const resultEdges = new Set();
+    const ambiguousTargets = new Set();
+    if(!startId) return {edges:resultEdges, targets:[]};
+    const adj = buildAdjacency();
+    const limitDepth = 6;
+    const nodeById = new Map(nodes.map(n=>[n.id,n]));
+    const reach = reachableFrom(startId); reach.delete(startId);
+
+    function dfs(u, target, visited, path, foundPaths){
+      if(foundPaths.length>=2) return; // we only need to know >1
+      if(path.length>limitDepth) return;
+      if(u===target){ foundPaths.push(path.slice()); return; }
+      const nbrs = adj.get(u)||[];
+      for(const v of nbrs){ if(visited.has(v)) continue; visited.add(v); path.push(v); dfs(v,target,visited,path,foundPaths); path.pop(); visited.delete(v); if(foundPaths.length>=2) return; }
+    }
+
+    for(const t of reach){
+      const foundPaths=[]; const visited=new Set([startId]);
+      dfs(startId, t, visited, [startId], foundPaths);
+      if(foundPaths.length>=2){
+        ambiguousTargets.add(t);
+        // record edges from first two paths
+        for(const p of foundPaths.slice(0,2)){
+          for(let i=0;i<p.length-1;i++){
+            const a=p[i], b=p[i+1];
+            // Find a concrete link respecting direction from a to b
+            const lnk = links.find(l=> (l.active) && ((l.source.id||l.source)===a) && ((l.target.id||l.target)===b) && (l.dir==='AtoB' || l.dir==='Both'))
+                     || links.find(l=> (l.active) && ((l.source.id||l.source)===b) && ((l.target.id||l.target)===a) && (l.dir==='BtoA' || l.dir==='Both'));
+            if(lnk) resultEdges.add(linkKeyObj(lnk)); else resultEdges.add(a+">"+b);
+          }
+        }
+      }
+    }
+    return {edges:resultEdges, targets:Array.from(ambiguousTargets).map(id=> nodeById.get(id)?.name || id)};
+  }
+
+  function computeInactiveCoverage(startId){
+    if(!startId) return [];
+    const baseReach = reachableFrom(startId);
+    const results = [];
+    for(const l of links){
+      if(l.active) continue;
+      const prev = l.active;
+      l.active = true;
+      const reach = reachableFrom(startId);
+      l.active = prev;
+      const gained = Array.from(reach).filter(id=> !baseReach.has(id) && id !== startId);
+      if(gained.length){
+        const s = l.source.id||l.source, t = l.target.id||l.target;
+        results.push({ link: `${s}→${t}` , gained: gained.map(id=> nodes.find(n=>n.id===id)?.name || id) });
+      }
+    }
+    return results;
+  }
+
+  function recompute(){
+    // Re-render link primitives (markers etc.) then apply classes
+    renderLinks();
+    nonselectiveSet = computeNonselective();
+    ambiguousSet = computeAmbiguity(selectedId).edges;
+    applyLinkClasses();
+
+    // Update nodes selection + reachability
+    if(selectedId){
+      const reach = reachableFrom(selectedId);
+      nodeLayer.selectAll('g.node')
+        .classed('selected', d=> d.id===selectedId)
+        .classed('reachable', d=> reach.has(d.id) && d.id!==selectedId);
+      reach.delete(selectedId);
+      updateNodeFills(reach);
+    } else {
+      nodeLayer.selectAll('g.node').classed('selected',false).classed('reachable',false);
+      updateNodeFills(null);
+    }
+    updateInfoPanel();
+  }
+
+  function updateInfoPanel(){
+    const nameEl = document.getElementById('selectionTitle');
+    const noteEl = document.getElementById('contextNote');
+    const reachEl = document.getElementById('reachSummary');
+    const notesEl = document.getElementById('tableNotes');
+    const measSection = document.getElementById('measuresSection');
+    const measList = document.getElementById('measuresList');
+    const listEl = document.getElementById('diagList');
+    if(!nameEl||!noteEl||!reachEl||!listEl) return;
+    listEl.innerHTML='';
+    if(measList) measList.innerHTML='';
+
+    if(!selectedId){
+      nameEl.textContent = 'No table selected';
+      noteEl.textContent = 'Select a table to inspect its filter flow.';
+      reachEl.textContent = '';
+      if(notesEl) notesEl.textContent = '';
+      if(measSection) measSection.style.display = 'none';
+    } else {
+      const node = nodes.find(n=>n.id===selectedId);
+      nameEl.textContent = node ? `Selected: ${node.name}` : `Selected: ${selectedId}`;
+      const reach = reachableFrom(selectedId); reach.delete(selectedId);
+      let dims=0, facts=0; reach.forEach(id=>{ const n=nodes.find(x=>x.id===id); if(!n) return; const g=(n.gran||inferGranularity(n.name)); if(g==='high') facts++; else dims++; });
+      const total = reach.size; const parts=[]; if(dims) parts.push(`${dims} dim`); if(facts) parts.push(`${facts} fact`);
+      noteEl.textContent = total ? `Filters flow to ${total} tables (${parts.join(', ')}) via active relationships.` : 'No tables receive filter via current active directions.';
+      reachEl.textContent = '';
+      if(notesEl){
+        const notes = node && node.notes ? (Array.isArray(node.notes) ? node.notes : [node.notes]) : [];
+        notesEl.textContent = notes.length ? `Note: ${notes.join(' • ')}` : '';
+      }
+      // Advanced measures rendering
+      if(measSection){
+        const measures = (node && Array.isArray(node.measures)) ? node.measures : [];
+        if(advancedMode && measures.length){
+          measSection.style.display = '';
+          if(measList){
+            measures.forEach(m=>{
+              const li=document.createElement('li');
+              li.style.color='var(--text)'; li.style.fontSize='.85rem';
+              const pieces = [m.name];
+              if(m.agg) pieces.push(`(${m.agg})`);
+              if(m.format) pieces.push(`[${m.format}]`);
+              li.textContent = pieces.join(' ');
+
+              // Risk hints based on diagnostics
+              const agg = (m.agg||'').toUpperCase();
+              const hints=[];
+              if(agg==='DISTINCTCOUNT'){
+                if(nonselectiveSet && nonselectiveSet.size) hints.push({icon:'⚠', color:'var(--danger)', text:'M:M/↔ risk'});
+                if(ambiguousSet && ambiguousSet.size)       hints.push({icon:'⚠', color:'var(--warn)',   text:'Ambiguous paths'});
+              } else if(agg==='AVERAGE'){
+                if(ambiguousSet && ambiguousSet.size)       hints.push({icon:'⚠', color:'var(--warn)',   text:'Ambiguous paths'});
+              } else if(agg==='SUM'){
+                if(ambiguousSet && ambiguousSet.size)       hints.push({icon:'ℹ', color:'var(--muted)',  text:'Dup risk'});
+              }
+              hints.forEach(h=>{ const s=document.createElement('span'); s.textContent = ` ${h.icon} ${h.text}`; s.style.color=h.color; s.style.marginLeft='.35rem'; s.style.fontSize='.75rem'; li.appendChild(s); });
+
+              measList.appendChild(li);
+            });
+          }
+        } else {
+          measSection.style.display = 'none';
+        }
+      }
+    }
+
+    // Diagnostics bullets
+    // Non-selective
+    if(nonselectiveSet.size){
+      const li=document.createElement('li'); li.style.color='var(--danger)';
+      const items = links.filter(l=> nonselectiveSet.has(linkKeyObj(l))).map(l=> `${(l.source.id||l.source)} ↔ ${(l.target.id||l.target)}`);
+      li.textContent = `Risky/non-selective relationships (M:M or bi-directional): ${items.join(', ')}`;
+      listEl.appendChild(li);
+    }
+    // Ambiguous
+    const amb = computeAmbiguity(selectedId);
+    if(amb.targets && amb.targets.length){
+      const li=document.createElement('li'); li.style.color='var(--warn)';
+      li.textContent = `Ambiguous paths from selection to: ${amb.targets.join(', ')}`;
+      listEl.appendChild(li);
+    }
+    // Inactive path coverage
+    const cov = computeInactiveCoverage(selectedId);
+    if(cov.length){
+      const li=document.createElement('li'); li.style.color='var(--muted)';
+      const parts = cov.map(c => `${c.link} adds: ${c.gained.join(', ')}`);
+      li.textContent = `Inactive relationships could expand reach — ${parts.join('; ')}`;
+      listEl.appendChild(li);
+    }
+  }
+
+  function dragstarted(e,d){ if(!e.active) sim.alphaTarget(.3).restart(); d.fx=d.x; d.fy=d.y; }
+  function dragged(e,d){ d.fx=e.x; d.fy=e.y; }
+  function dragended(e,d){ if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }
+
+  sim.on('tick',()=>{
+    linkLayer.selectAll('line.link')
+      .attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
+      .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    midLayer.selectAll('path.mid')
+      .attr('transform',d=>{const mx=(d.source.x+d.target.x)/2,my=(d.source.y+d.target.y)/2;let ang=Math.atan2(d.target.y-d.source.y,d.target.x-d.source.x)*180/Math.PI;if(d.dir==='BtoA') ang+=180;return `translate(${mx},${my}) rotate(${ang})`;});
+    midLayer.selectAll('text.link-label')
+      .attr('x',d=>{const l=d.link; return (l.source.x+l.target.x)/2;})
+      .attr('y',d=>{const l=d.link; return (l.source.y+l.target.y)/2 - 10;});
+    nodeLayer.selectAll('g.node').attr('transform',d=>`translate(${d.x},${d.y})`);
+  });
+
+const EXAMPLES = {
+  star: {
+    desc: "Classic star schema: multiple dimensions filter into a single fact table.",
+    nodes: [
+      {id:'D1', name:'DimDate', x:300, y:220, type:'dim', notes:["Calendar table for time intelligence."]},
+      {id:'D2', name:'DimProduct', x:300, y:480, type:'dim', notes:["Attributes: Category, Color, Brand."]},
+      {id:'D3', name:'DimCustomer', x:900, y:200, type:'dim', notes:["Slicer hub for customer attributes."]},
+      {id:'F1', name:'FactSales', x:600, y:350, type:'fact', notes:["Grain: one row per order line."], measures:[{name:'Total Sales', agg:'SUM', format:'currency'},{name:'Distinct Customers', agg:'DISTINCTCOUNT'},{name:'Avg Order Value', agg:'AVERAGE'}]}
+    ],
+    links: [
+      {source:'D1', target:'F1', dir:'AtoB', active:true},
+      {source:'D2', target:'F1', dir:'AtoB', active:true},
+      {source:'D3', target:'F1', dir:'AtoB', active:true}
+    ]
+  },
+  snowflake: {
+    desc: "Snowflake: a normalized dimension (Category→Product) feeding into the fact table.",
+    nodes: [
+      {id:'D1', name:'DimDate', x:260, y:220},
+      {id:'D2', name:'DimProduct', x:260, y:480},
+      {id:'D21', name:'DimCategory', x:120, y:480},
+      {id:'D3', name:'DimCustomer', x:900, y:220},
+      {id:'F1', name:'FactSales', x:600, y:350, type:'fact', measures:[{name:'Total Sales', agg:'SUM', format:'currency'},{name:'Distinct Customers', agg:'DISTINCTCOUNT'},{name:'Avg Order Value', agg:'AVERAGE'}]}
+    ],
+    links: [
+      {source:'D21', target:'D2', dir:'AtoB', active:true},
+      {source:'D1', target:'F1', dir:'AtoB', active:true},
+      {source:'D2', target:'F1', dir:'AtoB', active:true},
+      {source:'D3', target:'F1', dir:'AtoB', active:true}
+    ]
+  },
+  ambiguousSnowflake: {
+    desc: "Ambiguous snowflake: a root geo table feeds both City and State branches, both connecting to the fact — two active paths to the fact.",
+    nodes: [
+      {id:'Dgeo',  name:'DimGeoRoot', x:120, y:360, type:'dim', notes:["Root geography table (e.g., Country)"]},
+      {id:'Dcity', name:'DimCity',     x:280, y:260, type:'dim'},
+      {id:'Dstate',name:'DimState',    x:280, y:460, type:'dim'},
+      {id:'F1',    name:'FactSales',   x:600, y:360, type:'fact', measures:[{name:'Total Sales', agg:'SUM', format:'currency'},{name:'Distinct Customers', agg:'DISTINCTCOUNT'}]}
+    ],
+    links: [
+      {source:'Dgeo',  target:'Dcity',  dir:'AtoB', active:true},
+      {source:'Dgeo',  target:'Dstate', dir:'AtoB', active:true},
+      {source:'Dcity', target:'F1',     dir:'AtoB', active:true},
+      {source:'Dstate',target:'F1',     dir:'AtoB', active:true}
+    ]
+  },
+  redundantBridge: {
+    desc: "Redundant direct path in addition to bridge creates ambiguity: Segment filters the fact both directly and via Bridge→Customer.",
+    nodes: [
+      {id:'Dseg', name:'DimSegment', x:220, y:300, type:'dim', notes:["Segment has a direct link and a bridge path."]},
+      {id:'Bcs',  name:'BridgeCustomerSegment', x:420, y:300, type:'bridge', role:'bridge', notes:["Bridge resolves M:M between Segment and Customer."]},
+      {id:'Dcus', name:'DimCustomer', x:640, y:300, type:'dim', notes:["Filters the fact."]},
+      {id:'F1',   name:'FactSales', x:900, y:320, type:'fact', notes:["Ambiguous: Segment → Fact directly and via bridge."], measures:[{name:'Total Sales', agg:'SUM', format:'currency'},{name:'Distinct Customers', agg:'DISTINCTCOUNT'}]}
+    ],
+    links: [
+      {source:'Dseg', target:'Bcs',  dir:'AtoB', active:true},
+      {source:'Bcs',  target:'Dcus', dir:'AtoB', active:true},
+      {source:'Dcus', target:'F1',   dir:'AtoB', active:true},
+      // Redundant direct relationship that creates a second active path
+      {source:'Dseg', target:'F1',   dir:'AtoB', active:true}
+    ]
+  },
+  multiFacts: {
+    desc: "Two fact tables share conformed dimensions (Sales and Returns).",
+    nodes: [
+      {id:'D1', name:'DimDate', x:250, y:220},
+      {id:'D2', name:'DimProduct', x:250, y:500},
+      {id:'D3', name:'DimCustomer', x:950, y:360},
+      {id:'F1', name:'FactSales', x:560, y:300, type:'fact', measures:[{name:'Total Sales', agg:'SUM', format:'currency'},{name:'Distinct Customers', agg:'DISTINCTCOUNT'}]},
+      {id:'F2', name:'FactReturns', x:560, y:420, type:'fact', measures:[{name:'Total Returns', agg:'SUM'},{name:'Avg Return Amount', agg:'AVERAGE'},{name:'Distinct Return Orders', agg:'DISTINCTCOUNT'}]}
+    ],
+    links: [
+      {source:'D1', target:'F1', dir:'AtoB', active:true},
+      {source:'D1', target:'F2', dir:'AtoB', active:true},
+      {source:'D2', target:'F1', dir:'AtoB', active:true},
+      {source:'D2', target:'F2', dir:'AtoB', active:true},
+      {source:'D3', target:'F1', dir:'AtoB', active:true},
+      {source:'D3', target:'F2', dir:'AtoB', active:true}
+    ]
+  },
+  flatMulti: {
+    desc: "Flattened facts with attributes embedded; no shared dims, so slicers cannot filter across facts.",
+    nodes: [
+      {id:'F1', name:'FactSalesFlat', x:520, y:300, type:'fact', measures:[{name:'Total Sales', agg:'SUM'},{name:'Distinct Customers', agg:'DISTINCTCOUNT'}]},
+      {id:'F2', name:'FactReturnsFlat', x:520, y:420, type:'fact', measures:[{name:'Total Returns', agg:'SUM'},{name:'Avg Return Amount', agg:'AVERAGE'}]}
+    ],
+    links: []
+  },
+  bridge: {
+    desc: "Bridge resolves many-to-many between Segment and Customer. Segment → Bridge → Customer → Fact allows Segment slicers to reach the fact.",
+    nodes: [
+      {id:'Dseg', name:'DimSegment', x:260, y:220, type:'dim', notes:["Segment slicers map via bridge."]},
+      {id:'Bcs',  name:'BridgeCustomerSegment', x:440, y:300, type:'bridge', role:'bridge', notes:["Bridge resolves M:M between Segment and Customer."]},
+      {id:'Dcus', name:'DimCustomer', x:640, y:300, type:'dim', notes:["Downstream of bridge; filters the fact."]},
+      {id:'F1',   name:'FactSales', x:900, y:320, type:'fact', notes:["Fact filtered by Customer."], measures:[{name:'Total Sales', agg:'SUM', format:'currency'},{name:'Distinct Customers', agg:'DISTINCTCOUNT'}]}
+    ],
+    links: [
+      {source:'Dseg', target:'Bcs',  dir:'AtoB', active:true},
+      {source:'Bcs',  target:'Dcus', dir:'AtoB', active:true},
+      {source:'Dcus', target:'F1',   dir:'AtoB', active:true}
+    ]
+  },
+  roleDate: {
+    desc: "Role-playing Date: OrderDate (active) and ShipDate (inactive). Activate the second link to simulate USERELATIONSHIP.",
+    nodes: [
+      {id:'Dord',  name:'DimDate (Order)', x:300, y:250},
+      {id:'Dship', name:'DimDate (Ship)',  x:300, y:450},
+      {id:'F1',    name:'FactSales',       x:700, y:350, type:'fact', measures:[{name:'Total Sales', agg:'SUM'},{name:'Distinct Orders', agg:'DISTINCTCOUNT'},{name:'Avg Order Value', agg:'AVERAGE'}]}
+    ],
+    links: [
+      {source:'Dord',  target:'F1', dir:'AtoB', active:true},
+      {source:'Dship', target:'F1', dir:'AtoB', active:false}
+    ]
+  },
+  biDir: {
+    desc: "Bidirectional filter on Region ↔ Fact (demo only). Shows filters flowing back from fact to dimension and then across.",
+    nodes: [
+      {id:'Dprod',   name:'DimProduct', x:280, y:500, type:'dim', notes:["Product attributes."]},
+      {id:'Dregion', name:'DimRegion',  x:280, y:220, type:'dim', notes:["Bidirectional relationship (demo)."]},
+      {id:'F1',      name:'FactSales',  x:640, y:360, type:'fact', notes:["Fact table; receives filters from multiple dims."], measures:[{name:'Total Sales', agg:'SUM'},{name:'Distinct Customers', agg:'DISTINCTCOUNT'},{name:'Avg Order Value', agg:'AVERAGE'}]},
+      {id:'Dcust',   name:'DimCustomer',x:980, y:360, type:'dim', notes:["Receives backflow with ↔, may cross-filter."]}
+    ],
+    links: [
+      {source:'Dprod',   target:'F1', dir:'AtoB', active:true},
+      {source:'Dregion', target:'F1', dir:'Both', active:true},
+      {source:'Dcust',   target:'F1', dir:'AtoB', active:true}
+    ]
+  },
+  grainMismatch: {
+    desc: "Two fact tables at different grains: Sales (daily) vs Budget (monthly). Shared dims create misleading comparisons unless aligned.",
+    nodes: [
+      {id:'Ddate', name:'DimDate', x:260, y:220},
+      {id:'Dprod', name:'DimProduct', x:260, y:480},
+      {id:'Dcust', name:'DimCustomer', x:950, y:360},
+      {id:'Fsales', name:'FactSalesDaily', x:560, y:300, type:'fact', measures:[{name:'Total Sales', agg:'SUM'},{name:'Avg Daily Sales', agg:'AVERAGE'}]},
+      {id:'Fbudget', name:'FactBudgetMonthly', x:560, y:420, type:'fact', measures:[{name:'Budget Amount', agg:'SUM'},{name:'Avg Monthly Budget', agg:'AVERAGE'}]}
+    ],
+    links: [
+      {source:'Ddate', target:'Fsales', dir:'AtoB', active:true},
+      {source:'Ddate', target:'Fbudget', dir:'AtoB', active:true},
+      {source:'Dprod', target:'Fsales', dir:'AtoB', active:true},
+      {source:'Dprod', target:'Fbudget', dir:'AtoB', active:true},
+      {source:'Dcust', target:'Fsales', dir:'AtoB', active:true},
+      {source:'Dcust', target:'Fbudget', dir:'AtoB', active:true}
+    ]
+  },
+  manyToManyNoBridge: {
+    desc: "Many-to-many without a bridge: Segment and Customer both relate directly to the fact; users expect Segment ↔ Customer slicers to align but they don't.",
+    nodes: [
+      {id:'Dseg', name:'DimSegment', x:240, y:220, type:'dim', notes:["M:M with Customer without bridge — non-selective."]},
+      {id:'Dcus', name:'DimCustomer', x:240, y:480, type:'dim', notes:["M:M with Segment without bridge — non-selective."]},
+      {id:'F1', name:'FactSales', x:760, y:350, type:'fact', notes:["Filters from dims may conflict without bridge."], measures:[{name:'Distinct Customers', agg:'DISTINCTCOUNT'},{name:'Total Sales', agg:'SUM'}]}
+    ],
+    links: [
+      {source:'Dseg', target:'F1', dir:'AtoB', active:true},
+      {source:'Dcus', target:'F1', dir:'AtoB', active:true},
+      // ill-advised attempt to relate dims directly
+      {source:'Dseg', target:'Dcus', dir:'Both', active:true, cardinality:'*:*'}
+    ]
+  },
+  overBidirectionalLoop: {
+    desc: "Overuse of bidirectional: multiple dims set to ↔ with the fact cause cross-filtering between dimensions (unexpected slicer interactions).",
+    nodes: [
+      {id:'Dprod', name:'DimProduct', x:260, y:520},
+      {id:'Dreg',  name:'DimRegion',  x:260, y:220},
+      {id:'Dcust', name:'DimCustomer',x:960, y:360},
+      {id:'F1',    name:'FactSales',  x:600, y:360, type:'fact', measures:[{name:'Total Sales', agg:'SUM'},{name:'Distinct Customers', agg:'DISTINCTCOUNT'}]}
+    ],
+    links: [
+      {source:'Dprod', target:'F1', dir:'Both', active:true},
+      {source:'Dreg',  target:'F1', dir:'Both', active:true},
+      {source:'Dcust', target:'F1', dir:'Both', active:true}
+    ]
+  },
+  dualActiveDates: {
+    desc: "Two active date relationships (OrderDate and ShipDate) create ambiguous paths; typically one should be inactive and activated in measures.",
+    nodes: [
+      {id:'Dord',  name:'DimDate (Order)', x:300, y:250},
+      {id:'Dship', name:'DimDate (Ship)',  x:300, y:450},
+      {id:'F1',    name:'FactSales',       x:700, y:350, type:'fact', measures:[{name:'Total Sales', agg:'SUM'},{name:'Distinct Orders', agg:'DISTINCTCOUNT'}]}
+    ],
+    links: [
+      {source:'Dord',  target:'F1', dir:'AtoB', active:true},
+      {source:'Dship', target:'F1', dir:'AtoB', active:true} // both active (problem)
+    ]
+  },
+  wrongDirectionSnowflake: {
+    desc: "Snowflake with wrong direction: Product → Category instead of Category → Product; Category slicers won't reach the fact.",
+    nodes: [
+      {id:'Dcat', name:'DimCategory', x:120, y:480},
+      {id:'Dprod', name:'DimProduct', x:260, y:480},
+      {id:'F1', name:'FactSales', x:620, y:360, type:'fact', measures:[{name:'Total Sales', agg:'SUM'},{name:'Distinct Customers', agg:'DISTINCTCOUNT'}]}
+    ],
+    links: [
+      {source:'Dprod', target:'Dcat', dir:'AtoB', active:true}, // wrong direction
+      {source:'Dprod', target:'F1',   dir:'AtoB', active:true}
+    ]
+  },
+  // --- Insurance2 dataset scenarios ---
+  ins_pricing: {
+    desc: "Insurance2: Policy Pricing centered star with Policy snowflaked to Policy Type and Location; Customer reaches facts via Customer–Policy bridge.",
+    nodes: [
+      {id:'DCUS',  name:'DIM_CUSTOMER', x:200, y:350, type:'dim', notes:["Customer attributes for segmentation."]},
+      {id:'BCPM',  name:'BRIDGE_CUSTOMER_POLICY_MAP', x:400, y:350, type:'bridge', role:'bridge', notes:["Resolves M:M between Customer and Policy with coverage window."]},
+      {id:'DPOL',  name:'DIM_POLICY', x:600, y:350, type:'dim', notes:["Policy with term and joins to type and location."]},
+      {id:'DPT',   name:'DIM_POLICY_TYPE', x:600, y:210, type:'dim', notes:["Auto/Home/Life types."]},
+      {id:'DLOC',  name:'DIM_LOCATION', x:600, y:490, type:'dim', notes:["Geo for policies (city/state/region)."]},
+      {id:'FPRC',  name:'FACT_POLICY_PRICING', x:850, y:350, type:'fact', notes:["Premium and insured amounts by policy term."], measures:[{name:'Total Premium', agg:'SUM', format:'currency'},{name:'Avg Risk Score', agg:'AVERAGE'}]}
+    ],
+    links: [
+      {source:'DPT',  target:'DPOL', dir:'AtoB', active:true},
+      {source:'DLOC', target:'DPOL', dir:'AtoB', active:true},
+      {source:'DCUS', target:'BCPM', dir:'AtoB', active:true},
+      {source:'BCPM', target:'DPOL', dir:'AtoB', active:true},
+      {source:'DPOL', target:'FPRC', dir:'AtoB', active:true}
+    ]
+  },
+  ins_auto: {
+    desc: "Insurance2: Auto Claims fact filtered by Policy and Vehicle; Customer filters reach claims via Customer–Policy bridge.",
+    nodes: [
+      {id:'DCUS',  name:'DIM_CUSTOMER', x:200, y:380, type:'dim'},
+      {id:'BCPM',  name:'BRIDGE_CUSTOMER_POLICY_MAP', x:400, y:380, type:'bridge', role:'bridge'},
+      {id:'DPOL',  name:'DIM_POLICY', x:600, y:360, type:'dim'},
+      {id:'DPT',   name:'DIM_POLICY_TYPE', x:600, y:220, type:'dim'},
+      {id:'DLOC',  name:'DIM_LOCATION', x:600, y:520, type:'dim'},
+      {id:'DVEH',  name:'DIM_VEHICLE', x:600, y:600, type:'dim'},
+      {id:'FAUTO', name:'FACT_AUTO_CLAIM', x:920, y:440, type:'fact', measures:[{name:'Total Claim Amount', agg:'SUM', format:'currency'},{name:'Distinct Claims', agg:'DISTINCTCOUNT'},{name:'Avg Claim Amount', agg:'AVERAGE'}]}
+    ],
+    links: [
+      {source:'DPT',  target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DLOC', target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DCUS', target:'BCPM',  dir:'AtoB', active:true},
+      {source:'BCPM', target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DPOL', target:'FAUTO', dir:'AtoB', active:true},
+      {source:'DVEH', target:'FAUTO', dir:'AtoB', active:true}
+    ]
+  },
+  ins_life: {
+    desc: "Insurance2: Life Claims fact filtered by Policy; Customer segmentation via bridge to Policy.",
+    nodes: [
+      {id:'DCUS',  name:'DIM_CUSTOMER', x:200, y:320, type:'dim'},
+      {id:'BCPM',  name:'BRIDGE_CUSTOMER_POLICY_MAP', x:400, y:320, type:'bridge', role:'bridge'},
+      {id:'DPOL',  name:'DIM_POLICY', x:600, y:320, type:'dim'},
+      {id:'DPT',   name:'DIM_POLICY_TYPE', x:600, y:180, type:'dim'},
+      {id:'DLOC',  name:'DIM_LOCATION', x:600, y:460, type:'dim'},
+      {id:'FLIFE', name:'FACT_LIFE_CLAIM', x:920, y:260, type:'fact', measures:[{name:'Total Life Claim Amount', agg:'SUM', format:'currency'},{name:'Distinct Life Claims', agg:'DISTINCTCOUNT'}]}
+    ],
+    links: [
+      {source:'DPT',  target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DLOC', target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DCUS', target:'BCPM',  dir:'AtoB', active:true},
+      {source:'BCPM', target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DPOL', target:'FLIFE', dir:'AtoB', active:true}
+    ]
+  },
+  ins_exposure: {
+    desc: "Insurance2: Exposure reporting using monthly coverage; daily snapshot shown as optional inactive link.",
+    nodes: [
+      {id:'DCUS',  name:'DIM_CUSTOMER', x:200, y:360, type:'dim'},
+      {id:'BCPM',  name:'BRIDGE_CUSTOMER_POLICY_MAP', x:400, y:360, type:'bridge', role:'bridge'},
+      {id:'DPOL',  name:'DIM_POLICY', x:600, y:360, type:'dim'},
+      {id:'DPT',   name:'DIM_POLICY_TYPE', x:600, y:220, type:'dim'},
+      {id:'DLOC',  name:'DIM_LOCATION', x:600, y:500, type:'dim'},
+      {id:'FMON',  name:'FACT_POLICY_COVERAGE_MONTHLY', x:920, y:360, type:'fact', measures:[{name:'Total Exposure (months)', agg:'SUM'},{name:'Avg Exposure Ratio', agg:'AVERAGE'}]},
+      {id:'FSNAP', name:'FACT_POLICY_COVERAGE_SNAPSHOT', x:920, y:460, type:'fact', measures:[{name:'Active Days', agg:'SUM'}]}
+    ],
+    links: [
+      {source:'DPT',  target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DLOC', target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DCUS', target:'BCPM',  dir:'AtoB', active:true},
+      {source:'BCPM', target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DPOL', target:'FMON',  dir:'AtoB', active:true},
+      {source:'DPOL', target:'FSNAP', dir:'AtoB', active:false}
+    ]
+  },
+  ins_full: {
+    desc: "Insurance2: Full model with all sample tables wired. Customer filters flow via bridge to Policy; Policy snowflakes to Type and Location; Facts: Pricing, Auto Claim, Life Claim, Investigation, Exposure (monthly/daily).",
+    nodes: [
+      {id:'DCUS',  name:'DIM_CUSTOMER', x:180, y:380, type:'dim'},
+      {id:'BCPM',  name:'BRIDGE_CUSTOMER_POLICY_MAP', x:360, y:380, type:'bridge', role:'bridge'},
+      {id:'DPOL',  name:'DIM_POLICY', x:540, y:380, type:'dim'},
+      {id:'DPT',   name:'DIM_POLICY_TYPE', x:540, y:220, type:'dim'},
+      {id:'DLOC',  name:'DIM_LOCATION', x:540, y:540, type:'dim'},
+      {id:'DVEH',  name:'DIM_VEHICLE', x:540, y:620, type:'dim'},
+      {id:'FPRC',  name:'FACT_POLICY_PRICING', x:820, y:340, type:'fact', measures:[{name:'Total Premium', agg:'SUM', format:'currency'},{name:'Avg Risk Score', agg:'AVERAGE'}]},
+      {id:'FAUTO', name:'FACT_AUTO_CLAIM', x:820, y:460, type:'fact', measures:[{name:'Total Auto Claim Amount', agg:'SUM', format:'currency'},{name:'Distinct Auto Claims', agg:'DISTINCTCOUNT'}]},
+      {id:'FLIFE', name:'FACT_LIFE_CLAIM', x:1020, y:300, type:'fact', measures:[{name:'Total Life Claim Amount', agg:'SUM', format:'currency'}]},
+      {id:'FINV',  name:'FACT_CLAIM_INVESTIGATION', x:1020, y:520, type:'fact', measures:[{name:'Total Investigated Amount', agg:'SUM'},{name:'Distinct Investigations', agg:'DISTINCTCOUNT'}]},
+      {id:'FMON',  name:'FACT_POLICY_COVERAGE_MONTHLY', x:820, y:560, type:'fact', measures:[{name:'Exposure Months', agg:'SUM'}]},
+      {id:'FSNAP', name:'FACT_POLICY_COVERAGE_SNAPSHOT', x:1020, y:620, type:'fact', measures:[{name:'Active Days', agg:'SUM'}]}
+    ],
+    links: [
+      {source:'DCUS', target:'BCPM',  dir:'AtoB', active:true},
+      {source:'BCPM', target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DPT',  target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DLOC', target:'DPOL',  dir:'AtoB', active:true},
+      {source:'DPOL', target:'FPRC',  dir:'AtoB', active:true},
+      {source:'DPOL', target:'FAUTO', dir:'AtoB', active:true},
+      {source:'DPOL', target:'FLIFE', dir:'AtoB', active:true},
+      {source:'DPOL', target:'FMON',  dir:'AtoB', active:true},
+      {source:'DPOL', target:'FSNAP', dir:'AtoB', active:true},
+      {source:'DVEH', target:'FAUTO', dir:'AtoB', active:true},
+      {source:'DPT',  target:'FINV',  dir:'AtoB', active:true}
+    ]
+  }
+};
+
+function loadExample(key){
+  const ex = EXAMPLES[key] || EXAMPLES.star;
+  nodes.length = 0; links.length = 0; idCounter = 1; pendingSource=null; connectMode=false; dimColorCounter = 0;
+  document.getElementById('modePill').textContent='Mode: Select';
+  ex.nodes.forEach(n=>{
+    const nn = { ...n };
+    nn.id = n.id; nn.name = n.name; nn.x = n.x; nn.y = n.y;
+    nn.width = n.width || 120; nn.height = n.height || 50;
+    if(!nn.gran) nn.gran = inferGranularity(nn.name);
+    // Assign palette cycling index for dimensions (used in light mode for border color)
+    const t = nodeType(nn);
+    if(t==='dim'){ nn.strokeIdx = dimColorCounter++; }
+    nodes.push(nn);
+  });
+  ex.links.forEach(l=>{
+    const ll = { ...l };
+    ll.cardinality = l.cardinality || l.card;
+    links.push(ll);
+  });
+  render();
+  const descEl = document.getElementById('exampleDesc'); if (descEl) descEl.textContent = ex.desc || '—';
+  const nameEl = document.getElementById('exampleName');
+  if(nameEl){
+    let name = key;
+    const selEl = document.getElementById('exampleSelect');
+    if(selEl){ const opt = Array.from(selEl.options).find(o=>o.value===key); if(opt) name = opt.text; }
+    nameEl.textContent = name;
+  }
+  selectedId=null; nonselectiveSet.clear(); ambiguousSet.clear();
+  recompute();
+  toast('Loaded example: '+key);
+}
+
+// initial load
+loadExample('star');
+</script>
+</body>
+</html>
