@@ -3,76 +3,72 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LASTNONBLANK / Infinite Zoom Calendar (White Theme)</title>
+  <title>LASTNONBLANK • Inventory Narrative</title>
   <style>
     :root{
-      /* Pluralsight brand palette (from images) */
-      --pink:#FF1675;          /* Transform Pink (primary) */
-      --inky:#130F25;          /* Inky Blue (primary bg/text on dark; here as ink text) */
-      --blue:#00A3FF;          /* secondary */
-      --purple:#770EF7;        /* secondary */
-      --yellow:#FFC942;        /* secondary */
-      --orange:#FF7B01;        /* secondary */
-      --green:#02E088;         /* secondary */
-      --slate-900:#1B1834;     /* alt shade */
-      --slate-600:#585FA2;     /* alt shade */
-      --slate-50:#EBEFF5;      /* alt shade */
-
-      --bg:#ffffff;            /* requested white background */
-      --text:#0f172a;          /* neutral body text */
-      --muted:#475569;         /* captions */
-      --card:#f8fafc;          /* light cards */
-      --line:#e2e8f0;          /* light borders */
+      --pink:#FF1675;
+      --inky:#130F25;
+      --blue:#00A3FF;
+      --yellow:#FFC942;
+      --bg:#ffffff;
+      --text:#0f172a;
+      --muted:#475569;
+      --card:#f8fafc;
+      --line:#e2e8f0;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; background:var(--bg); color:var(--text); display:flex; flex-direction:column}
-    header{display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:14px 18px; border-bottom:1px solid var(--line); position:sticky; top:0; background:rgba(255,255,255,.86); backdrop-filter:saturate(1.1) blur(6px); z-index:10}
-    header h1{margin:0; font-size:18px}
-    .tag{display:inline-flex; align-items:center; gap:8px; background:var(--slate-50); border:1px solid var(--line); border-radius:999px; padding:6px 10px; font-size:12px; color:var(--inky)}
-    .swatch{width:12px; height:12px; border-radius:999px; border:1px solid #0001}
+    header{display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:14px 18px; border-bottom:1px solid var(--line); position:sticky; top:0; background:rgba(255,255,255,.9); backdrop-filter:saturate(1.1) blur(6px); z-index:10}
+    header h1{margin:0; font-size:18px; font-weight:700; letter-spacing:-0.01em}
     #app{display:grid; grid-template-rows:auto 1fr; gap:10px; padding:14px; min-height:0; flex:1}
 
     .stage{display:grid; grid-template-columns:1fr 320px; gap:14px; min-height:0}
     .board{position:relative; border:1px solid var(--line); border-radius:14px; background:var(--card); overflow:hidden}
-    .aside{border:1px solid var(--line); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:10px}
-    .aside h2{margin:.2rem 0; font-size:14px}
+    .aside{border:1px solid var(--line); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:10px; background:#fff}
+    .aside h2{margin:.2rem 0; font-size:14px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted)}
     .kbd{display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:28px; padding:0 8px; border:1px solid #cbd5e1; border-bottom-width:2px; border-radius:8px; background:#fff; color:#111827; font-size:12px}
 
-    /* SVG scene holder */
     #scene{width:100%; height:100%; display:block; background:#fff}
 
-    /* Calendar visuals */
-    .day{stroke:#CBD5E1; fill:#fff}
-    .day.highlight{stroke:var(--pink); stroke-width:2.5}
-    .day.faded{opacity:.18}
-    .month-title{font:600 10px/1 Inter,system-ui; fill:#334155}
-    .month-label{font:700 12px/1 Inter,system-ui; fill:#0f172a}
-    .value-badge{font:800 10px/1 Inter,system-ui; fill:#fff}
-    .badge-bg{fill:var(--pink)}
+    .year{transition:opacity .6s ease}
+    .year.dimmed{opacity:0.18}
+    .month{transition:opacity .6s ease}
+    .month.dimmed{opacity:0.12}
 
-    .focus-ring{fill:none; stroke:var(--blue); stroke-width:4; stroke-linejoin:round; stroke-dasharray:8 8}
+    .day{stroke:#CBD5E1; fill:#fff; transition:stroke .4s ease, stroke-width .4s ease, opacity .4s ease}
+    .day-value{font:700 11px/1 Inter,system-ui; fill:#0f172a; text-anchor:middle; dominant-baseline:middle; opacity:0; transition:opacity .4s ease, fill .4s ease}
+    .month.show-values .day-value{opacity:1}
+    .month.highlight-all .day{stroke:var(--pink); stroke-width:2.4}
+    .month.highlight-all .day-value{opacity:1; fill:var(--pink)}
+    .month.focus-last .day{opacity:0.22}
+    .month.focus-last .day.last-day{opacity:1; stroke:var(--pink); stroke-width:2.6}
+    .month.focus-last .day-value{opacity:0.15}
+    .month.focus-last .day-value.last{opacity:1; fill:var(--pink)}
+    .badge-bg,.value-badge{opacity:0; transition:opacity .4s ease}
+    .month.show-badge .badge-bg,.month.show-badge .value-badge{opacity:1}
+    .month.multi-highlight{opacity:1}
+    .month.multi-highlight .day{opacity:0.22}
+    .month.multi-highlight .day.last-day{opacity:1}
+
+    .month-label{font:700 12px/1 Inter,system-ui; fill:#0f172a}
+    .month-title{font:600 9px/1 Inter,system-ui; fill:#334155}
+    .value-badge{font:800 10px/1 Inter,system-ui; fill:#fff}
+    .focus-ring{fill:none; stroke:var(--blue); stroke-width:4; stroke-linejoin:round; stroke-dasharray:8 8; opacity:0; transition:opacity .4s ease}
 
     footer{padding:10px 16px; border-top:1px solid var(--line); color:#334155; font-size:12px; display:flex; justify-content:space-between; gap:12px}
   </style>
 </head>
 <body>
   <header>
-    <h1>LASTNONBLANK • Infinite Zoom Calendar (White)</h1>
-    <span class="tag"><span class="swatch" style="background:var(--pink)"></span> Transform Pink</span>
-    <span class="tag"><span class="swatch" style="background:var(--inky)"></span> Inky Blue</span>
-    <span class="tag"><span class="swatch" style="background:var(--blue)"></span> Blue</span>
-    <span class="tag"><span class="swatch" style="background:var(--purple)"></span> Purple</span>
-    <span class="tag"><span class="swatch" style="background:var(--yellow)"></span> Yellow</span>
-    <span class="tag"><span class="swatch" style="background:var(--orange)"></span> Orange</span>
-    <span class="tag"><span class="swatch" style="background:var(--green)"></span> Green</span>
-    <div style="margin-left:auto; color:#475569; font-size:13px">Use <span class="kbd">→</span>/<span class="kbd">←</span> to step; hold <span class="kbd">Shift</span> and scroll to zoom; <span class="kbd">R</span> reset</div>
+    <h1>LASTNONBLANK • Inventory Storyboard</h1>
+    <div style="margin-left:auto; color:#475569; font-size:13px">Use <span class="kbd">←</span>/<span class="kbd">→</span> to change scenes • <span class="kbd">R</span> restart • Hold <span class="kbd">Shift</span> + scroll to zoom</div>
   </header>
 
   <div id="app">
     <div class="stage">
       <div class="board">
-        <svg id="scene" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Infinite zoom calendar"></svg>
+        <svg id="scene" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Inventory calendar storyboard"></svg>
       </div>
       <aside class="aside" id="aside">
         <h2>Selection</h2>
@@ -81,119 +77,139 @@
         <div style="font-size:13px; color:#475569" id="expl"></div>
         <h2>Controls</h2>
         <div style="font-size:13px; color:#475569">
-          <div><span class="kbd">→</span> Next level (zoom out)</div>
-          <div><span class="kbd">←</span> Previous level (zoom in)</div>
-          <div><span class="kbd">R</span> Reset camera</div>
-          <div>Scroll + <span class="kbd">Shift</span> for smooth zoom. Click a cell/month/year to focus.</div>
+          <div><span class="kbd">→</span> Next scene</div>
+          <div><span class="kbd">←</span> Previous scene</div>
+          <div><span class="kbd">R</span> Restart from Scene 1</div>
+          <div>Hold <span class="kbd">Shift</span> while scrolling for smooth zoom. Click a month or day to explore.</div>
         </div>
       </aside>
     </div>
   </div>
 
   <footer>
-    <div>Values emulate inventory (semi‑additive). At higher aggregations we use the <strong>last non‑blank day</strong> in each period.</div>
-    <div>Palette per Pluralsight guidelines. Highlights = <span style="color:var(--pink); font-weight:800">Transform Pink</span>.</div>
+    <div>Inventory is semi-additive: we carry forward the <strong>last non-blank day</strong> when aggregating.</div>
+    <div>Scenes illustrate how LASTNONBLANK summarizes daily records into monthly, yearly, and multi-year trends.</div>
   </footer>
 
 <script>
 (function(){
-  // -------------------- Data --------------------
-  let seed = 7; function rand(){ seed = (1664525*seed+1013904223)>>>0; return seed/4294967296; }
+  let seed = 13;
+  function rand(){ seed = (1664525*seed+1013904223)>>>0; return seed/4294967296; }
   function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
   function daysInMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
   function monthName(m){ return new Date(2000, m, 1).toLocaleString(undefined,{month:'long'}); }
 
   const today = new Date();
   const baseYear = today.getFullYear();
+  const focusYear = baseYear;
+  const focusMonth = today.getMonth();
   const years = [baseYear-2, baseYear-1, baseYear, baseYear+1, baseYear+2];
 
   function genMonthValues(year, month){
-    const dmax = daysInMonth(year, month); let v = Math.floor(300 + rand()*300);
-    const arr = []; for(let d=1; d<=dmax; d++){ v = clamp(v + Math.floor((rand()-.5)*40), 10, 999); arr.push({day:d, value:v}); }
+    const dmax = daysInMonth(year, month); let v = Math.floor(40 + rand()*20);
+    const arr = [];
+    for(let d=1; d<=dmax; d++){
+      v = clamp(v + Math.floor((rand()-.5)*12), 0, 99);
+      arr.push({day:d, value:v});
+    }
     return arr;
   }
   function genYear(y){
-    const months = []; const lastValues = [];
-    for(let m=0;m<12;m++){ const mv = genMonthValues(y,m); months.push(mv); lastValues.push({month:m, lastDay:mv[mv.length-1].day, value:mv[mv.length-1].value}); }
-    return {year:y, months, lastValues};
+    const months = [];
+    for(let m=0;m<12;m++){ months.push(genMonthValues(y,m)); }
+    return {year:y, months};
   }
   const data = years.map(genYear);
 
-  // -------------------- Scene layout (SVG) --------------------
   const svg = document.getElementById('scene');
-  const W = 2200, H = 1200; // logical canvas (will scale to fit)
+  const W = 2200, H = 1200;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  function g(cls){ const el=document.createElementNS('http://www.w3.org/2000/svg','g'); if(cls) el.setAttribute('class',cls); return el; }
+  function rect(x,y,w,h,fill){ const el=document.createElementNS('http://www.w3.org/2000/svg','rect'); el.setAttribute('x',x); el.setAttribute('y',y); el.setAttribute('width',w); el.setAttribute('height',h); if(fill) el.setAttribute('fill',fill); return el; }
+  function text(str,x,y,cls){ const el=document.createElementNS('http://www.w3.org/2000/svg','text'); el.textContent=str; el.setAttribute('x',x); el.setAttribute('y',y); if(cls) el.setAttribute('class',cls); return el; }
+  function translate(el,x,y){ el.setAttribute('transform', `translate(${x},${y})`); }
+  function outline(x,y,w,h){ const el=rect(x,y,w,h,'none'); el.setAttribute('rx','12'); el.setAttribute('ry','12'); el.setAttribute('stroke-width','3'); return el; }
 
   const root = g(); root.setAttribute('id','root'); svg.appendChild(root);
 
-  // layout constants
-  const YEAR_W = 1000, YEAR_H = 700; // size of a single year tile
+  const YEAR_W = 1000, YEAR_H = 700;
   const YEAR_GAP = 140;
   const MONTH_COLS = 4, MONTH_ROWS = 3;
-  const MONTH_W = (YEAR_W - 60) / MONTH_COLS; // padding inside year
+  const MONTH_W = (YEAR_W - 60) / MONTH_COLS;
   const MONTH_H = (YEAR_H - 120) / MONTH_ROWS;
-  const DAY_GAP = 3, DAY_W = (MONTH_W-30)/7, DAY_H = (MONTH_H-40)/6; // 6 weeks grid
+  const DAY_GAP = 3, DAY_W = (MONTH_W-30)/7, DAY_H = (MONTH_H-40)/6;
 
-  // position years in a horizontal row
   const yearPositions = new Map();
   years.forEach((y,i)=>{ yearPositions.set(y, {x: i*(YEAR_W+YEAR_GAP)+60, y: (H-YEAR_H)/2}); });
 
-  // build all vectors (years → months → days)
+  const yearMap = new Map();
+  const monthMap = new Map();
+
   data.forEach(Y=>{
     const yG = g('year'); yG.dataset.year = Y.year;
     const pos = yearPositions.get(Y.year); translate(yG,pos.x,pos.y);
-
     const title = text(`${Y.year}`, 18, -16, 'year-title'); title.style.font = '800 24px Inter,system-ui'; title.style.fill = '#0f172a'; yG.appendChild(title);
 
     const ym = grid(MONTH_ROWS, MONTH_COLS, MONTH_W, MONTH_H, 30, 30);
+    const monthsInfo = [];
+
     ym.forEach((mpos, index)=>{
-      const month = index; // 0..11
+      const month = index;
+      const values = Y.months[month];
       const mG = g('month'); mG.dataset.month = month; translate(mG, mpos.x, mpos.y);
-      // outline
-      const mRect = rect(0,0,MONTH_W,MONTH_H,'#fff'); mRect.setAttribute('rx','10'); mRect.setAttribute('ry','10'); mRect.setAttribute('stroke','#E2E8F0'); mRect.setAttribute('fill','#fff'); yG.appendChild(mG); mG.appendChild(mRect);
-      // header
+      const mRect = rect(0,0,MONTH_W,MONTH_H,'#fff'); mRect.setAttribute('rx','10'); mRect.setAttribute('ry','10'); mRect.setAttribute('stroke','#E2E8F0');
+      yG.appendChild(mG); mG.appendChild(mRect);
       mG.appendChild(text(monthName(month), 8, 14, 'month-label'));
 
-      // days grid (6 rows x 7 cols)
-      const first = new Date(Y.year, month, 1); const startW=(first.getDay()+6)%7; // Mon=0
+      const first = new Date(Y.year, month, 1);
+      const startW=(first.getDay()+6)%7;
       const dim = daysInMonth(Y.year, month);
       let r=0,c=startW;
+      const daysInfo = [];
+
       for(let d=1; d<=dim; d++){
         const x = 12 + c*(DAY_W+DAY_GAP), y = 26 + r*(DAY_H+DAY_GAP);
-        const cell = rect(x,y,DAY_W,DAY_H,'#fff'); cell.setAttribute('class','day'); cell.dataset.year=Y.year; cell.dataset.month=month; cell.dataset.day=d;
-        if(d===dim){ cell.classList.add('highlight'); }
+        const cell = rect(x,y,DAY_W,DAY_H,'#fff'); cell.setAttribute('class','day');
+        cell.dataset.year=Y.year; cell.dataset.month=month; cell.dataset.day=d;
         mG.appendChild(cell);
-        // small day number
-        const dl = text(String(d), x+3, y+10, 'month-title'); dl.style.font='600 9px Inter'; mG.appendChild(dl);
-        // value badge only on last day
-        if(d===dim){
-          const badge = rect(x+DAY_W-34, y+DAY_H-18, 30, 14, 'var(--pink)'); badge.setAttribute('rx','6'); badge.setAttribute('class','badge-bg'); mG.appendChild(badge);
-          const v = Y.months[month][dim-1].value; const tv = text(String(v), x+DAY_W-19, y+DAY_H-8, 'value-badge'); mG.appendChild(tv);
-        }
+
+        const dayLabel = text(String(d), x+3, y+10, 'month-title'); dayLabel.style.font='600 9px Inter'; mG.appendChild(dayLabel);
+
+        const value = values[d-1].value;
+        const vt = text(value.toString().padStart(2,'0'), x + DAY_W/2, y + DAY_H/2 + 2, 'day-value');
+        mG.appendChild(vt);
+
+        const dayInfo = {cell, valueText:vt, day:d, value};
+        daysInfo.push(dayInfo);
+
         c++; if(c===7){ c=0; r++; }
       }
-      yG.appendChild(mG);
-      // mark December focus ring placeholder
-      if(month===11){ const fr = outline(0,0,MONTH_W,MONTH_H); fr.setAttribute('class','focus-ring'); fr.style.opacity = '0'; mG.appendChild(fr); mG.dataset.focusId = `fr-${Y.year}`; fr.setAttribute('id', `fr-${Y.year}`); }
+
+      const last = daysInfo.at(-1);
+      last.cell.classList.add('last-day');
+      last.valueText.classList.add('last');
+      const badge = rect(last.cell.getAttribute('x')*1 + DAY_W-34, last.cell.getAttribute('y')*1 + DAY_H-18, 30, 14, 'var(--pink)');
+      badge.setAttribute('rx','6'); badge.setAttribute('class','badge-bg'); mG.appendChild(badge);
+      const badgeText = text(String(last.value).padStart(2,'0'), badge.getAttribute('x')*1 + 15, badge.getAttribute('y')*1 + 10, 'value-badge');
+      badgeText.setAttribute('text-anchor','middle');
+      mG.appendChild(badgeText);
+
+      let focusRing;
+      if(month===11){ focusRing = outline(0,0,MONTH_W,MONTH_H); focusRing.setAttribute('class','focus-ring'); mG.appendChild(focusRing); }
+
+      const monthInfo = {group:mG, year:Y.year, month, days:daysInfo, lastDay:last, badge:{rect:badge, text:badgeText}, focusRing};
+      monthsInfo.push(monthInfo);
+      monthMap.set(`${Y.year}-${month}`, monthInfo);
     });
+
     root.appendChild(yG);
+    yearMap.set(Y.year, {group:yG, months:monthsInfo});
   });
 
-  // -------------------- Camera / Zoom --------------------
   let cam = {x:0, y:0, k:1};
-  // initial: fit all years into view
   fitToBBox(root.getBBox(), 24);
 
-  function translate(el,x,y){ el.setAttribute('transform', `translate(${x},${y})`); }
-  function g(cls){ const el=document.createElementNS('http://www.w3.org/2000/svg','g'); if(cls) el.setAttribute('class',cls); return el; }
-  function rect(x,y,w,h,fill){ const el=document.createElementNS('http://www.w3.org/2000/svg','rect'); el.setAttribute('x',x); el.setAttribute('y',y); el.setAttribute('width',w); el.setAttribute('height',h); if(fill) el.setAttribute('fill',fill); return el; }
-  function text(str,x,y,cls){
-    const el=document.createElementNS('http://www.w3.org/2000/svg','text');
-    el.textContent=str; el.setAttribute('x',x); el.setAttribute('y',y);
-    if(cls) el.setAttribute('class',cls);
-    return el;
-  }
-  // Helper to create a grid of positions (r x c)
   function grid(rows, cols, cw, ch, padX=0, padY=0){
     const out=[];
     for(let r=0;r<rows;r++){
@@ -203,15 +219,16 @@
     }
     return out;
   }
-  function outline(x,y,w,h){ const el=rect(x,y,w,h,'none'); el.setAttribute('rx','12'); el.setAttribute('ry','12'); el.setAttribute('stroke-width','3'); return el; }
 
   function setCam(x,y,k){ cam={x,y,k}; root.setAttribute('transform', `translate(${x},${y}) scale(${k})`); }
   function animateTo(target, ms=600){
-    const s = performance.now(); const a0 = {...cam};
+    const s = performance.now(); const start = {...cam};
     const ease = t=> t<.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
     function tick(now){
       const t = Math.min(1,(now-s)/ms); const e=ease(t);
-      const x=a0.x + (target.x-a0.x)*e, y=a0.y + (target.y-a0.y)*e, k=a0.k + (target.k-a0.k)*e;
+      const x=start.x + (target.x-start.x)*e;
+      const y=start.y + (target.y-start.y)*e;
+      const k=start.k + (target.k-start.k)*e;
       setCam(x,y,k);
       if(t<1) requestAnimationFrame(tick);
     }
@@ -224,357 +241,118 @@
     setCam(x,y,k);
   }
 
-  function focusElement(el, scalePad=12){
+  function focusElement(el, pad=12){
     const bb = el.getBBox();
-    const bbp = {x:bb.x-scalePad, y:bb.y-scalePad, width:bb.width+2*scalePad, height:bb.height+2*scalePad};
-    const sx = (W - 80) / bbp.width; const sy = (H - 80) / bbp.height; const k = Math.min(sx, sy);
+    const bbp = {x:bb.x-pad, y:bb.y-pad, width:bb.width+2*pad, height:bb.height+2*pad};
+    const sx = (W - 120) / bbp.width; const sy = (H - 120) / bbp.height; const k = Math.min(sx, sy);
     const x = -bbp.x * k + (W - bbp.width * k)/2; const y = -bbp.y * k + (H - bbp.height * k)/2;
     animateTo({x,y,k});
   }
 
-  // -------------------- Stage logic --------------------
-  let stage = 0; // 0: all years, 1: focus year (current), 2: focus December, 3: month days all (current month), 4: single last day
+  const STAGES = 6;
+  let stage = 0;
 
-  function setAside(htmlSel, htmlExpl){ document.getElementById('sel').innerHTML = htmlSel; document.getElementById('expl').innerHTML = htmlExpl; }
-
-  function update(){
-    // hide all focus rings
-    svg.querySelectorAll('.focus-ring').forEach(fr=> fr.style.opacity='0');
-
-    if(stage===0){ // all years
-      fitToBBox(root.getBBox(), 24);
-      setAside('<strong>All Years:</strong> December last-day values', 'At the year level we select the last non‑blank day in December for each year. (Semi‑additive: we carry forward the end‑of‑period value rather than summing).');
-    }
-    else if(stage===1){ // focus current year
-      const yg = [...svg.querySelectorAll('g.year')].find(y=> y.dataset.year===""+baseYear);
-      focusElement(yg);
-      setAside(`<strong>Year ${baseYear}</strong>`, 'Each month shows only the last day highlighted. The value badge is the inventory on that last day → the month's representative value.');
-    }
-    else if(stage===2){ // highlight December ring
-      const dec = [...svg.querySelectorAll('g.year')].find(y=> y.dataset.year===""+baseYear).querySelector('g.month[data-month="11"]');
-      dec.querySelector('.focus-ring').style.opacity='1';
-      focusElement(dec);
-      const last = data.find(y=>y.year===baseYear).lastValues[11];
-      setAside(`<strong>${monthName(11)} ${baseYear}</strong> — last day ${last.lastDay}, value <span style="color:var(--pink); font-weight:800">${last.value}</span>`, 'When rolling up to the year, December’s last non‑blank is commonly used to represent the year‑end inventory.');
-    }
-    else if(stage===3){ // focus current month (today's month)
-      const m = today.getMonth();
-      const mEl = [...svg.querySelectorAll('g.year')].find(y=> y.dataset.year===""+baseYear).querySelector(`g.month[data-month="${m}"]`);
-      focusElement(mEl);
-      setAside(`<strong>${monthName(m)} ${baseYear}</strong>`, 'Now you can see all days of this month. The pink badge on the last day is the value LASTNONBLANK chooses for the month.');
-    }
-    else if(stage===4){ // focus single last day cell
-      const m = today.getMonth();
-      const yEl = [...svg.querySelectorAll('g.year')].find(y=> y.dataset.year===""+baseYear);
-      const mEl = yEl.querySelector(`g.month[data-month="${m}"]`);
-      const day = mEl.querySelector('.day.highlight');
-      focusElement(day, 40);
-      const v = data.find(y=>y.year===baseYear).months[m].at(-1).value;
-      setAside(`<strong>Selected Day:</strong> ${monthName(m)} ${daysInMonth(baseYear,m)}, ${baseYear} → <span style="color:var(--pink); font-weight:800">${v}</span>`, 'This is the <em>last non‑blank day</em> of the month. At the month level this exact value is used.');
-    }
-  }
-
-  update();
-
-  // -------------------- Interaction --------------------
-  window.addEventListener('keydown', (e)=>{
-    if(e.key==='ArrowRight'){ stage = Math.min(4, stage+1); update(); }
-    else if(e.key==='ArrowLeft'){ stage = Math.max(0, stage-1); update(); }
-    else if(e.key==='r' || e.key==='R'){ stage=0; update(); }
-  });
-
-  // Smooth zoom via Shift + wheel
-  svg.addEventListener('wheel', (e)=>{
-    if(!e.shiftKey) return; e.preventDefault();
-    const factor = Math.pow(1.0015, -e.deltaY);
-    const k = clamp(cam.k * factor, 0.15, 20);
-    const mx = e.offsetX / svg.clientWidth * W; const my = e.offsetY / svg.clientHeight * H;
-    const x = mx - (mx - cam.x)/cam.k * k; const y = my - (my - cam.y)/cam.k * k;
-    setCam(x,y,k);
-  }, {passive:false});
-
-  // Click to focus
-  svg.addEventListener('click', (e)=>{
-    const t = e.target;
-    if(t.closest('g.month')){ focusElement(t.closest('g.month')); stage=3; update(); }
-    if(t.classList.contains('day')){ focusElement(t, 40); stage=4; update(); }
-    if(t.closest('g.year')){ focusElement(t.closest('g.year')); stage=1; update(); }
-  });
-})();
-</script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LASTNONBLANK / Infinite Zoom Calendar (White Theme)</title>
-  <style>
-    :root{
-      /* Pluralsight brand palette (from images) */
-      --pink:#FF1675;          /* Transform Pink (primary) */
-      --inky:#130F25;          /* Inky Blue (primary bg/text on dark; here as ink text) */
-      --blue:#00A3FF;          /* secondary */
-      --purple:#770EF7;        /* secondary */
-      --yellow:#FFC942;        /* secondary */
-      --orange:#FF7B01;        /* secondary */
-      --green:#02E088;         /* secondary */
-      --slate-900:#1B1834;     /* alt shade */
-      --slate-600:#585FA2;     /* alt shade */
-      --slate-50:#EBEFF5;      /* alt shade */
-
-      --bg:#ffffff;            /* requested white background */
-      --text:#0f172a;          /* neutral body text */
-      --muted:#475569;         /* captions */
-      --card:#f8fafc;          /* light cards */
-      --line:#e2e8f0;          /* light borders */
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; background:var(--bg); color:var(--text); display:flex; flex-direction:column}
-    header{display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:14px 18px; border-bottom:1px solid var(--line); position:sticky; top:0; background:rgba(255,255,255,.86); backdrop-filter:saturate(1.1) blur(6px); z-index:10}
-    header h1{margin:0; font-size:18px}
-    .tag{display:inline-flex; align-items:center; gap:8px; background:var(--slate-50); border:1px solid var(--line); border-radius:999px; padding:6px 10px; font-size:12px; color:var(--inky)}
-    .swatch{width:12px; height:12px; border-radius:999px; border:1px solid #0001}
-    #app{display:grid; grid-template-rows:auto 1fr; gap:10px; padding:14px; min-height:0; flex:1}
-
-    .stage{display:grid; grid-template-columns:1fr 320px; gap:14px; min-height:0}
-    .board{position:relative; border:1px solid var(--line); border-radius:14px; background:var(--card); overflow:hidden}
-    .aside{border:1px solid var(--line); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:10px}
-    .aside h2{margin:.2rem 0; font-size:14px}
-    .kbd{display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:28px; padding:0 8px; border:1px solid #cbd5e1; border-bottom-width:2px; border-radius:8px; background:#fff; color:#111827; font-size:12px}
-
-    /* SVG scene holder */
-    #scene{width:100%; height:100%; display:block; background:#fff}
-
-    /* Calendar visuals */
-    .day{stroke:#CBD5E1; fill:#fff}
-    .day.highlight{stroke:var(--pink); stroke-width:2.5}
-    .day.faded{opacity:.18}
-    .month-title{font:600 10px/1 Inter,system-ui; fill:#334155}
-    .month-label{font:700 12px/1 Inter,system-ui; fill:#0f172a}
-    .value-badge{font:800 10px/1 Inter,system-ui; fill:#fff}
-    .badge-bg{fill:var(--pink)}
-
-    .focus-ring{fill:none; stroke:var(--blue); stroke-width:4; stroke-linejoin:round; stroke-dasharray:8 8}
-
-    footer{padding:10px 16px; border-top:1px solid var(--line); color:#334155; font-size:12px; display:flex; justify-content:space-between; gap:12px}
-  </style>
-</head>
-<body>
-  <header>
-    <h1>LASTNONBLANK • Infinite Zoom Calendar (White)</h1>
-    <span class="tag"><span class="swatch" style="background:var(--pink)"></span> Transform Pink</span>
-    <span class="tag"><span class="swatch" style="background:var(--inky)"></span> Inky Blue</span>
-    <span class="tag"><span class="swatch" style="background:var(--blue)"></span> Blue</span>
-    <span class="tag"><span class="swatch" style="background:var(--purple)"></span> Purple</span>
-    <span class="tag"><span class="swatch" style="background:var(--yellow)"></span> Yellow</span>
-    <span class="tag"><span class="swatch" style="background:var(--orange)"></span> Orange</span>
-    <span class="tag"><span class="swatch" style="background:var(--green)"></span> Green</span>
-    <div style="margin-left:auto; color:#475569; font-size:13px">Use <span class="kbd">→</span>/<span class="kbd">←</span> to step; hold <span class="kbd">Shift</span> and scroll to zoom; <span class="kbd">R</span> reset</div>
-  </header>
-
-  <div id="app">
-    <div class="stage">
-      <div class="board">
-        <svg id="scene" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Infinite zoom calendar"></svg>
-      </div>
-      <aside class="aside" id="aside">
-        <h2>Selection</h2>
-        <div id="sel"></div>
-        <h2>Explanation</h2>
-        <div style="font-size:13px; color:#475569" id="expl"></div>
-        <h2>Controls</h2>
-        <div style="font-size:13px; color:#475569">
-          <div><span class="kbd">→</span> Next level (zoom out)</div>
-          <div><span class="kbd">←</span> Previous level (zoom in)</div>
-          <div><span class="kbd">R</span> Reset camera</div>
-          <div>Scroll + <span class="kbd">Shift</span> for smooth zoom. Click a cell/month/year to focus.</div>
-        </div>
-      </aside>
-    </div>
-  </div>
-
-  <footer>
-    <div>Values emulate inventory (semi‑additive). At higher aggregations we use the <strong>last non‑blank day</strong> in each period.</div>
-    <div>Palette per Pluralsight guidelines. Highlights = <span style="color:var(--pink); font-weight:800">Transform Pink</span>.</div>
-  </footer>
-
-<script>
-(function(){
-  // -------------------- Data --------------------
-  let seed = 7; function rand(){ seed = (1664525*seed+1013904223)>>>0; return seed/4294967296; }
-  function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
-  function daysInMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
-  function monthName(m){ return new Date(2000, m, 1).toLocaleString(undefined,{month:'long'}); }
-
-  const today = new Date();
-  const baseYear = today.getFullYear();
-  const years = [baseYear-2, baseYear-1, baseYear, baseYear+1, baseYear+2];
-
-  function genMonthValues(year, month){
-    const dmax = daysInMonth(year, month); let v = Math.floor(300 + rand()*300);
-    const arr = []; for(let d=1; d<=dmax; d++){ v = clamp(v + Math.floor((rand()-.5)*40), 10, 999); arr.push({day:d, value:v}); }
-    return arr;
-  }
-  function genYear(y){
-    const months = []; const lastValues = [];
-    for(let m=0;m<12;m++){ const mv = genMonthValues(y,m); months.push(mv); lastValues.push({month:m, lastDay:mv[mv.length-1].day, value:mv[mv.length-1].value}); }
-    return {year:y, months, lastValues};
-  }
-  const data = years.map(genYear);
-
-  // -------------------- Scene layout (SVG) --------------------
-  const svg = document.getElementById('scene');
-  const W = 2200, H = 1200; // logical canvas (will scale to fit)
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-
-  const root = g(); root.setAttribute('id','root'); svg.appendChild(root);
-
-  // layout constants
-  const YEAR_W = 1000, YEAR_H = 700; // size of a single year tile
-  const YEAR_GAP = 140;
-  const MONTH_COLS = 4, MONTH_ROWS = 3;
-  const MONTH_W = (YEAR_W - 60) / MONTH_COLS; // padding inside year
-  const MONTH_H = (YEAR_H - 120) / MONTH_ROWS;
-  const DAY_GAP = 3, DAY_W = (MONTH_W-30)/7, DAY_H = (MONTH_H-40)/6; // 6 weeks grid
-
-  // position years in a horizontal row
-  const yearPositions = new Map();
-  years.forEach((y,i)=>{ yearPositions.set(y, {x: i*(YEAR_W+YEAR_GAP)+60, y: (H-YEAR_H)/2}); });
-
-  // build all vectors (years → months → days)
-  data.forEach(Y=>{
-    const yG = g('year'); yG.dataset.year = Y.year;
-    const pos = yearPositions.get(Y.year); translate(yG,pos.x,pos.y);
-
-    const title = text(`${Y.year}`, 18, -16, 'year-title'); title.style.font = '800 24px Inter,system-ui'; title.style.fill = '#0f172a'; yG.appendChild(title);
-
-    const ym = grid(MONTH_ROWS, MONTH_COLS, MONTH_W, MONTH_H, 30, 30);
-    ym.forEach((mpos, index)=>{
-      const month = index; // 0..11
-      const mG = g('month'); mG.dataset.month = month; translate(mG, mpos.x, mpos.y);
-      // outline
-      const mRect = rect(0,0,MONTH_W,MONTH_H,'#fff'); mRect.setAttribute('rx','10'); mRect.setAttribute('ry','10'); mRect.setAttribute('stroke','#E2E8F0'); mRect.setAttribute('fill','#fff'); yG.appendChild(mG); mG.appendChild(mRect);
-      // header
-      mG.appendChild(text(monthName(month), 8, 14, 'month-label'));
-
-      // days grid (6 rows x 7 cols)
-      const first = new Date(Y.year, month, 1); const startW=(first.getDay()+6)%7; // Mon=0
-      const dim = daysInMonth(Y.year, month);
-      let r=0,c=startW;
-      for(let d=1; d<=dim; d++){
-        const x = 12 + c*(DAY_W+DAY_GAP), y = 26 + r*(DAY_H+DAY_GAP);
-        const cell = rect(x,y,DAY_W,DAY_H,'#fff'); cell.setAttribute('class','day'); cell.dataset.year=Y.year; cell.dataset.month=month; cell.dataset.day=d;
-        if(d===dim){ cell.classList.add('highlight'); }
-        mG.appendChild(cell);
-        // small day number
-        const dl = text(String(d), x+3, y+10, 'month-title'); dl.style.font='600 9px Inter'; mG.appendChild(dl);
-        // value badge only on last day
-        if(d===dim){
-          const badge = rect(x+DAY_W-34, y+DAY_H-18, 30, 14, 'var(--pink)'); badge.setAttribute('rx','6'); badge.setAttribute('class','badge-bg'); mG.appendChild(badge);
-          const v = Y.months[month][dim-1].value; const tv = text(String(v), x+DAY_W-19, y+DAY_H-8, 'value-badge'); mG.appendChild(tv);
-        }
-        c++; if(c===7){ c=0; r++; }
-      }
-      yG.appendChild(mG);
-      // mark December focus ring placeholder
-      if(month===11){ const fr = outline(0,0,MONTH_W,MONTH_H); fr.setAttribute('class','focus-ring'); fr.style.opacity = '0'; mG.appendChild(fr); mG.dataset.focusId = `fr-${Y.year}`; fr.setAttribute('id', `fr-${Y.year}`); }
+  function resetScene(){
+    yearMap.forEach(({group})=>{ group.setAttribute('class','year'); });
+    monthMap.forEach(({group, focusRing})=>{
+      group.setAttribute('class','month');
+      if(focusRing) focusRing.style.opacity = '0';
     });
-    root.appendChild(yG);
-  });
-
-  // -------------------- Camera / Zoom --------------------
-  let cam = {x:0, y:0, k:1};
-  // initial: fit all years into view
-  fitToBBox(root.getBBox(), 24);
-
-  function translate(el,x,y){ el.setAttribute('transform', `translate(${x},${y})`); }
-  function g(cls){ const el=document.createElementNS('http://www.w3.org/2000/svg','g'); if(cls) el.setAttribute('class',cls); return el; }
-  function rect(x,y,w,h,fill){ const el=document.createElementNS('http://www.w3.org/2000/svg','rect'); el.setAttribute('x',x); el.setAttribute('y',y); el.setAttribute('width',w); el.setAttribute('height',h); if(fill) el.setAttribute('fill',fill); return el; }
-  function text(str,x,y,cls){ const el=document.createElementNS('http://www.w3.org/2000/svg','text'); el.textContent=str; el.setAttribute('x',x); el.setAttribute('y',y); if(cls) el.setAttribute('class',cls); return el; }
-  function outline(x,y,w,h){ const el=rect(x,y,w,h,'none'); el.setAttribute('rx','12'); el.setAttribute('ry','12'); el.setAttribute('stroke-width','3'); return el; }
-
-  function setCam(x,y,k){ cam={x,y,k}; root.setAttribute('transform', `translate(${x},${y}) scale(${k})`); }
-  function animateTo(target, ms=600){
-    const s = performance.now(); const a0 = {...cam};
-    const ease = t=> t<.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
-    function tick(now){
-      const t = Math.min(1,(now-s)/ms); const e=ease(t);
-      const x=a0.x + (target.x-a0.x)*e, y=a0.y + (target.y-a0.y)*e, k=a0.k + (target.k-a0.k)*e;
-      setCam(x,y,k);
-      if(t<1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
   }
 
-  function fitToBBox(bb, pad=0){
-    const sx = (W - 2*pad) / bb.width; const sy = (H - 2*pad) / bb.height; const k = Math.min(sx, sy);
-    const x = -bb.x * k + (W - bb.width * k)/2; const y = -bb.y * k + (H - bb.height * k)/2;
-    setCam(x,y,k);
+  function setAside(sel, expl){
+    document.getElementById('sel').innerHTML = sel;
+    document.getElementById('expl').innerHTML = expl;
   }
-
-  function focusElement(el, scalePad=12){
-    const bb = el.getBBox();
-    const bbp = {x:bb.x-scalePad, y:bb.y-scalePad, width:bb.width+2*scalePad, height:bb.height+2*scalePad};
-    const sx = (W - 80) / bbp.width; const sy = (H - 80) / bbp.height; const k = Math.min(sx, sy);
-    const x = -bbp.x * k + (W - bbp.width * k)/2; const y = -bbp.y * k + (H - bbp.height * k)/2;
-    animateTo({x,y,k});
-  }
-
-  // -------------------- Stage logic --------------------
-  let stage = 0; // 0: all years, 1: focus year (current), 2: focus December, 3: month days all (current month), 4: single last day
-
-  function setAside(htmlSel, htmlExpl){ document.getElementById('sel').innerHTML = htmlSel; document.getElementById('expl').innerHTML = htmlExpl; }
 
   function update(){
-    // hide all focus rings
-    svg.querySelectorAll('.focus-ring').forEach(fr=> fr.style.opacity='0');
+    resetScene();
+    const focusMonthInfo = monthMap.get(`${focusYear}-${focusMonth}`);
+    const focusYearInfo = yearMap.get(focusYear);
+    const decemberInfo = monthMap.get(`${focusYear}-11`);
 
-    if(stage===0){ // all years
-      fitToBBox(root.getBBox(), 24);
-      setAside('<strong>All Years:</strong> December last-day values', 'At the year level we select the last non‑blank day in December for each year. (Semi‑additive: we carry forward the end‑of‑period value rather than summing).');
+    if(stage===0){
+      yearMap.forEach(({group}, y)=>{ if(y!==focusYear) group.classList.add('dimmed'); });
+      focusYearInfo.months.forEach(m=>{ if(m.month!==focusMonth) m.group.classList.add('dimmed'); });
+      focusMonthInfo.group.classList.add('show-values');
+      focusElement(focusMonthInfo.group, 40);
+      setAside(`<strong>${monthName(focusMonth)} ${focusYear}</strong> — Daily inventory snapshot`,
+        `Imagine you're tracking the number of widgets stored in a warehouse over time. Each cell shows the ending inventory for that day.`);
     }
-    else if(stage===1){ // focus current year
-      const yg = [...svg.querySelectorAll('g.year')].find(y=> y.dataset.year===""+baseYear);
-      focusElement(yg);
-      setAside(`<strong>Year ${baseYear}</strong>`, 'Each month shows only the last day highlighted. The value badge is the inventory on that last day → the month's representative value.');
+    else if(stage===1){
+      yearMap.forEach(({group}, y)=>{ if(y!==focusYear) group.classList.add('dimmed'); });
+      focusYearInfo.months.forEach(m=>{ if(m.month!==focusMonth) m.group.classList.add('dimmed'); });
+      focusMonthInfo.group.classList.add('show-values','highlight-all');
+      focusElement(focusMonthInfo.group, 40);
+      setAside('<strong>Daily totals highlighted</strong>',
+        `If you record inventory every day, you can still review the month by selecting every single daily value — similar to how a SUM would treat daily totals.`);
     }
-    else if(stage===2){ // highlight December ring
-      const dec = [...svg.querySelectorAll('g.year')].find(y=> y.dataset.year===""+baseYear).querySelector('g.month[data-month="11"]');
-      dec.querySelector('.focus-ring').style.opacity='1';
-      focusElement(dec);
-      const last = data.find(y=>y.year===baseYear).lastValues[11];
-      setAside(`<strong>${monthName(11)} ${baseYear}</strong> — last day ${last.lastDay}, value <span style="color:var(--pink); font-weight:800">${last.value}</span>`, 'When rolling up to the year, December’s last non‑blank is commonly used to represent the year‑end inventory.');
+    else if(stage===2){
+      yearMap.forEach(({group}, y)=>{ if(y!==focusYear) group.classList.add('dimmed'); });
+      focusYearInfo.months.forEach(m=>{ if(m.month!==focusMonth) m.group.classList.add('dimmed'); });
+      focusMonthInfo.group.classList.add('show-values');
+      requestAnimationFrame(()=>{
+        focusMonthInfo.group.classList.add('focus-last','show-badge');
+      });
+      focusElement(focusMonthInfo.group, 40);
+      setAside('<strong>Last day represents the month</strong>',
+        `To understand the month without summing or averaging, LASTNONBLANK keeps just the inventory from the final day. All other days fade into the background.`);
     }
-    else if(stage===3){ // focus current month (today's month)
-      const m = today.getMonth();
-      const mEl = [...svg.querySelectorAll('g.year')].find(y=> y.dataset.year===""+baseYear).querySelector(`g.month[data-month="${m}"]`);
-      focusElement(mEl);
-      setAside(`<strong>${monthName(m)} ${baseYear}</strong>`, 'Now you can see all days of this month. The pink badge on the last day is the value LASTNONBLANK chooses for the month.');
+    else if(stage===3){
+      yearMap.forEach(({group}, y)=>{ if(y!==focusYear) group.classList.add('dimmed'); });
+      focusYearInfo.months.forEach(m=>{ m.group.classList.add('focus-last','show-badge'); });
+      focusElement(focusYearInfo.group, 60);
+      setAside(`<strong>${focusYear} at a glance</strong>`,
+        `Rolling up to the month level gives one value per month — the inventory on the last day of that month. It's perfect for showing how stock changed throughout the year.`);
     }
-    else if(stage===4){ // focus single last day cell
-      const m = today.getMonth();
-      const yEl = [...svg.querySelectorAll('g.year')].find(y=> y.dataset.year===""+baseYear);
-      const mEl = yEl.querySelector(`g.month[data-month="${m}"]`);
-      const day = mEl.querySelector('.day.highlight');
-      focusElement(day, 40);
-      const v = data.find(y=>y.year===baseYear).months[m].at(-1).value;
-      setAside(`<strong>Selected Day:</strong> ${monthName(m)} ${daysInMonth(baseYear,m)}, ${baseYear} → <span style="color:var(--pink); font-weight:800">${v}</span>`, 'This is the <em>last non‑blank day</em> of the month. At the month level this exact value is used.');
+    else if(stage===4){
+      yearMap.forEach(({group}, y)=>{ if(y!==focusYear) group.classList.add('dimmed'); });
+      focusYearInfo.months.forEach(m=>{
+        if(m.month===11){
+          m.group.classList.add('focus-last','show-badge');
+          if(m.focusRing) m.focusRing.style.opacity = '1';
+        }else{
+          m.group.classList.add('dimmed');
+        }
+      });
+      focusElement(focusYearInfo.group, 60);
+      const last = decemberInfo.lastDay;
+      setAside('<strong>Year-end focus</strong>',
+        `For annual reporting we keep only December's final reading — day ${last.day} with ${last.value} units. That single value carries the year-end inventory forward.`);
+    }
+    else if(stage===5){
+      yearMap.forEach(({group, months})=>{
+        months.forEach(m=>{
+          if(m.month===11){
+            m.group.classList.add('focus-last','show-badge','multi-highlight');
+            if(m.focusRing) m.focusRing.style.opacity = '1';
+          }else{
+            m.group.classList.add('dimmed');
+          }
+        });
+      });
+      fitToBBox(root.getBBox(), 60);
+      setAside('<strong>Multi-year trend</strong>',
+        `By keeping just the last non-blank day of the last month for each year, we can monitor inventory patterns across many years without plotting every single day. That's the power of LASTNONBLANK.`);
     }
   }
 
   update();
 
-  // -------------------- Interaction --------------------
   window.addEventListener('keydown', (e)=>{
-    if(e.key==='ArrowRight'){ stage = Math.min(4, stage+1); update(); }
-    else if(e.key==='ArrowLeft'){ stage = Math.max(0, stage-1); update(); }
-    else if(e.key==='r' || e.key==='R'){ stage=0; update(); }
+    if(e.key==='ArrowRight'){
+      stage = Math.min(STAGES-1, stage+1);
+      update();
+    }
+    else if(e.key==='ArrowLeft'){
+      stage = Math.max(0, stage-1);
+      update();
+    }
+    else if(e.key==='r' || e.key==='R'){
+      stage = 0; update();
+    }
   });
 
-  // Smooth zoom via Shift + wheel
   svg.addEventListener('wheel', (e)=>{
     if(!e.shiftKey) return; e.preventDefault();
     const factor = Math.pow(1.0015, -e.deltaY);
@@ -584,12 +362,18 @@
     setCam(x,y,k);
   }, {passive:false});
 
-  // Click to focus
   svg.addEventListener('click', (e)=>{
-    const t = e.target;
-    if(t.closest('g.month')){ focusElement(t.closest('g.month')); stage=3; update(); }
-    if(t.classList.contains('day')){ focusElement(t, 40); stage=4; update(); }
-    if(t.closest('g.year')){ focusElement(t.closest('g.year')); stage=1; update(); }
+    const monthEl = e.target.closest('g.month');
+    if(monthEl){
+      const key = `${monthEl.closest('g.year').dataset.year}-${monthEl.dataset.month}`;
+      const info = monthMap.get(key);
+      focusElement(info.group, 30);
+    }
+    const yearEl = e.target.closest('g.year');
+    if(yearEl){
+      const info = yearMap.get(Number(yearEl.dataset.year));
+      focusElement(info.group, 60);
+    }
   });
 })();
 </script>
