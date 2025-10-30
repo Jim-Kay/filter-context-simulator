@@ -18,13 +18,16 @@
     }
     *{box-sizing:border-box}
     html,body{height:100%}
+    html,body{overflow:hidden}
     body{margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; background:var(--bg); color:var(--text); display:flex; flex-direction:column}
     header{display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:14px 18px; border-bottom:1px solid var(--line); position:sticky; top:0; background:rgba(255,255,255,.9); backdrop-filter:saturate(1.1) blur(6px); z-index:10}
     header h1{margin:0; font-size:18px; font-weight:700; letter-spacing:-0.01em}
     #app{display:grid; grid-template-rows:auto 1fr; gap:10px; padding:14px; min-height:0; flex:1}
 
     .stage{display:grid; grid-template-columns:1fr 320px; gap:14px; min-height:0}
-    .board{position:relative; border:1px solid var(--line); border-radius:14px; background:var(--card); overflow:hidden}
+    .board{position:relative; border:1px solid var(--line); border-radius:14px; background:var(--card); overflow:hidden; -webkit-user-select:none; user-select:none}
+    svg{ -webkit-user-select:none; user-select:none; cursor:grab }
+    svg text{ -webkit-user-select:none; user-select:none; pointer-events:none }
     .aside{border:1px solid var(--line); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:10px; background:#fff}
     .aside h2{margin:.2rem 0; font-size:14px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted)}
     .kbd{display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:28px; padding:0 8px; border:1px solid #cbd5e1; border-bottom-width:2px; border-radius:8px; background:#fff; color:#111827; font-size:12px}
@@ -51,18 +54,31 @@
     .month.multi-highlight .day{opacity:0.22}
     .month.multi-highlight .day.last-day{opacity:1}
 
+    /* Only the last day gets the highlight (no badge, no overall dimming) */
+    .month.highlight-last .day.last-day{stroke:var(--pink); stroke-width:2.4}
+    .month.highlight-last .day-value.last{opacity:1; fill:var(--pink)}
+
     .month-label{font:700 12px/1 Inter,system-ui; fill:#0f172a}
-    .month-title{font:600 9px/1 Inter,system-ui; fill:#334155}
+    .month-title{font-size:5px; font-weight:600; fill:#334155}
     .value-badge{font:800 10px/1 Inter,system-ui; fill:#fff}
     .focus-ring{fill:none; stroke:var(--blue); stroke-width:4; stroke-linejoin:round; stroke-dasharray:8 8; opacity:0; transition:opacity .4s ease}
 
     footer{padding:10px 16px; border-top:1px solid var(--line); color:#334155; font-size:12px; display:flex; justify-content:space-between; gap:12px}
+
+    .scene-pill{display:inline-flex; align-items:center; gap:6px; margin-left:8px; padding:3px 8px; border:1px solid var(--line); border-radius:999px; font-size:12px; font-weight:700; color:#334155; background:#f8fafc}
+
+    /* HUD for camera state (footer pill) */
+    .hud{padding:4px 8px; font-size:12px; color:#0f172a; background:#fff; border:1px solid #e2e8f0; border-radius:8px}
+    .footer-right{display:flex; align-items:center; gap:12px}
   </style>
 </head>
 <body>
   <header>
-    <h1>LASTNONBLANK • Inventory Storyboard</h1>
-    <div style="margin-left:auto; color:#475569; font-size:13px">Use <span class="kbd">←</span>/<span class="kbd">→</span> to change scenes • <span class="kbd">R</span> restart • Hold <span class="kbd">Shift</span> + scroll to zoom</div>
+    <h1>LASTNONBLANK • Inventory Storyboard <span id="scenePill" class="scene-pill">Scene 1/6</span></h1>
+    <div style="margin-left:auto; color:#475569; font-size:13px; display:flex; align-items:center; gap:10px">
+      <button id="toggleAsideBtn" style="background:#fff;border:1px solid #cbd5e1;border-bottom-width:2px;border-radius:8px;padding:6px 10px;color:#0f172a;font-weight:600;cursor:pointer">Show details</button>
+      <span>Use <span class="kbd">←</span>/<span class="kbd">→</span> to change scenes • <span class="kbd">R</span> restart • Scroll to zoom • Drag to pan (<span class="kbd">Space</span> + drag anywhere)</span>
+    </div>
   </header>
 
   <div id="app">
@@ -70,7 +86,7 @@
       <div class="board">
         <svg id="scene" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Inventory calendar storyboard"></svg>
       </div>
-      <aside class="aside" id="aside">
+      <aside class="aside" id="aside" style="display:none">
         <h2>Selection</h2>
         <div id="sel"></div>
         <h2>Explanation</h2>
@@ -80,7 +96,7 @@
           <div><span class="kbd">→</span> Next scene</div>
           <div><span class="kbd">←</span> Previous scene</div>
           <div><span class="kbd">R</span> Restart from Scene 1</div>
-          <div>Hold <span class="kbd">Shift</span> while scrolling for smooth zoom. Click a month or day to explore.</div>
+          <div>Scroll to zoom. Drag to pan (<span class="kbd">Space</span> + drag anywhere). Click a month or day to explore.</div>
         </div>
       </aside>
     </div>
@@ -88,7 +104,10 @@
 
   <footer>
     <div>Inventory is semi-additive: we carry forward the <strong>last non-blank day</strong> when aggregating.</div>
-    <div>Scenes illustrate how LASTNONBLANK summarizes daily records into monthly, yearly, and multi-year trends.</div>
+    <div class="footer-right">
+      <div>Scenes illustrate how LASTNONBLANK summarizes daily records into monthly, yearly, and multi-year trends.</div>
+      <div id="hud" class="hud">x: 0, y: 0, zoom: 1.00</div>
+    </div>
   </footer>
 
 <script>
@@ -124,6 +143,16 @@
   const svg = document.getElementById('scene');
   const W = 2200, H = 1200;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  // Camera view presets
+  const VIEW_PRESETS = {
+    scene0: { x: -14420.6, y: -4054.9, k: 5.66 },
+    scene1: { x: -14420.6, y: -4054.9, k: 5.66 },
+    scene2: { x: -14420.6, y: -4054.9, k: 5.66 },
+    scene3: { x: -3756.9,  y: -328.0,  k: 1.65 },
+    scene4: { x: -3756.9,  y: -328.0,  k: 1.65 },
+    scene6: { x: -11.2,    y: -577.7,  k: 0.72 }
+  };
 
   function g(cls){ const el=document.createElementNS('http://www.w3.org/2000/svg','g'); if(cls) el.setAttribute('class',cls); return el; }
   function rect(x,y,w,h,fill){ const el=document.createElementNS('http://www.w3.org/2000/svg','rect'); el.setAttribute('x',x); el.setAttribute('y',y); el.setAttribute('width',w); el.setAttribute('height',h); if(fill) el.setAttribute('fill',fill); return el; }
@@ -174,7 +203,10 @@
         cell.dataset.year=Y.year; cell.dataset.month=month; cell.dataset.day=d;
         mG.appendChild(cell);
 
-        const dayLabel = text(String(d), x+3, y+10, 'month-title'); dayLabel.style.font='600 9px Inter'; mG.appendChild(dayLabel);
+        const dayLabel = text(String(d), x+3, y+10, 'month-title');
+        dayLabel.setAttribute('font-size','5');
+        dayLabel.setAttribute('font-weight','600');
+        mG.appendChild(dayLabel);
 
         const value = values[d-1].value;
         const vt = text(value.toString().padStart(2,'0'), x + DAY_W/2, y + DAY_H/2 + 2, 'day-value');
@@ -186,7 +218,7 @@
         c++; if(c===7){ c=0; r++; }
       }
 
-      const last = daysInfo.at(-1);
+      const last = daysInfo[daysInfo.length - 1];
       last.cell.classList.add('last-day');
       last.valueText.classList.add('last');
       const badge = rect(last.cell.getAttribute('x')*1 + DAY_W-34, last.cell.getAttribute('y')*1 + DAY_H-18, 30, 14, 'var(--pink)');
@@ -202,9 +234,69 @@
       monthsInfo.push(monthInfo);
       monthMap.set(`${Y.year}-${month}`, monthInfo);
     });
-
     root.appendChild(yG);
     yearMap.set(Y.year, {group:yG, months:monthsInfo});
+  });
+
+  // 9-year grid (3x3) for Scene 7 only (moved outside the 5-year loop)
+  const root9 = g(); root9.setAttribute('id','root9'); svg.appendChild(root9); root9.style.display = 'none';
+  const years9 = [2022,2023,2024,2025,2026,2027,2028,2029,2030];
+  const data9 = years9.map(genYear);
+  const yearPositions9 = new Map();
+  const yearMap9 = new Map();
+  const monthMap9 = new Map();
+  const GRID_COLS9 = 3;
+  years9.forEach((y,i)=>{
+    const r = Math.floor(i/GRID_COLS9), c = i%GRID_COLS9;
+    yearPositions9.set(y, {x: 60 + c*(YEAR_W+YEAR_GAP), y: 60 + r*(YEAR_H+YEAR_GAP)});
+  });
+  data9.forEach(Y=>{
+    const yG = g('year'); yG.dataset.year = Y.year;
+    const pos = yearPositions9.get(Y.year); translate(yG,pos.x,pos.y);
+    const title = text(`${Y.year}`, 18, -16, 'year-title'); title.style.font = '800 24px Inter,system-ui'; title.style.fill = '#0f172a'; yG.appendChild(title);
+    const ym = grid(MONTH_ROWS, MONTH_COLS, MONTH_W, MONTH_H, 30, 30);
+    const monthsInfo = [];
+    ym.forEach((mpos, index)=>{
+      const month = index;
+      const values = Y.months[month];
+      const mG = g('month'); mG.dataset.month = month; translate(mG, mpos.x, mpos.y);
+      const mRect = rect(0,0,MONTH_W,MONTH_H,'#fff'); mRect.setAttribute('rx','10'); mRect.setAttribute('ry','10'); mRect.setAttribute('stroke','#E2E8F0');
+      yG.appendChild(mG); mG.appendChild(mRect);
+      mG.appendChild(text(monthName(month), 8, 14, 'month-label'));
+      const first = new Date(Y.year, month, 1);
+      const startW=(first.getDay()+6)%7;
+      const dim = daysInMonth(Y.year, month);
+      let r=0,c=startW;
+      const daysInfo = [];
+      for(let d=1; d<=dim; d++){
+        const x = 12 + c*(DAY_W+DAY_GAP), y = 26 + r*(DAY_H+DAY_GAP);
+        const cell = rect(x,y,DAY_W,DAY_H,'#fff'); cell.setAttribute('class','day');
+        cell.dataset.year=Y.year; cell.dataset.month=month; cell.dataset.day=d;
+        mG.appendChild(cell);
+        const dayLabel = text(String(d), x+3, y+10, 'month-title');
+        dayLabel.setAttribute('font-size','5'); dayLabel.setAttribute('font-weight','600');
+        mG.appendChild(dayLabel);
+        const value = values[d-1].value;
+        const vt = text(value.toString().padStart(2,'0'), x + DAY_W/2, y + DAY_H/2 + 2, 'day-value');
+        mG.appendChild(vt);
+        const dayInfo = {cell, valueText:vt, day:d, value};
+        daysInfo.push(dayInfo);
+        c++; if(c===7){ c=0; r++; }
+      }
+      const last = daysInfo[daysInfo.length - 1];
+      last.cell.classList.add('last-day');
+      last.valueText.classList.add('last');
+      const badge = rect(last.cell.getAttribute('x')*1 + DAY_W-34, last.cell.getAttribute('y')*1 + DAY_H-18, 30, 14, 'var(--pink)');
+      badge.setAttribute('rx','6'); badge.setAttribute('class','badge-bg'); mG.appendChild(badge);
+      const badgeText = text(String(last.value).padStart(2,'0'), badge.getAttribute('x')*1 + 15, badge.getAttribute('y')*1 + 10, 'value-badge');
+      badgeText.setAttribute('text-anchor','middle'); mG.appendChild(badgeText);
+      let focusRing; if(month===11){ focusRing = outline(0,0,MONTH_W,MONTH_H); focusRing.setAttribute('class','focus-ring'); mG.appendChild(focusRing); }
+      const monthInfo = {group:mG, year:Y.year, month, days:daysInfo, lastDay:last, badge:{rect:badge, text:badgeText}, focusRing};
+      monthsInfo.push(monthInfo);
+      monthMap9.set(`${Y.year}-${month}`, monthInfo);
+    });
+    root9.appendChild(yG);
+    yearMap9.set(Y.year, {group:yG, months:monthsInfo});
   });
 
   let cam = {x:0, y:0, k:1};
@@ -220,7 +312,13 @@
     return out;
   }
 
-  function setCam(x,y,k){ cam={x,y,k}; root.setAttribute('transform', `translate(${x},${y}) scale(${k})`); }
+  function setCam(x,y,k){
+    cam={x,y,k};
+    root.setAttribute('transform', `translate(${x},${y}) scale(${k})`);
+    if(root9) root9.setAttribute('transform', `translate(${x},${y}) scale(${k})`);
+    const hud=document.getElementById('hud');
+    if(hud){ hud.textContent = `x: ${cam.x.toFixed(1)}, y: ${cam.y.toFixed(1)}, zoom: ${cam.k.toFixed(2)}`; }
+  }
   function animateTo(target, ms=600){
     const s = performance.now(); const start = {...cam};
     const ease = t=> t<.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
@@ -249,14 +347,27 @@
     animateTo({x,y,k});
   }
 
-  const STAGES = 6;
+  // Compute the camera target for an element without animating
+  function cameraTargetForElement(el, pad=12){
+    const bb = el.getBBox();
+    const bbp = {x:bb.x-pad, y:bb.y-pad, width:bb.width+2*pad, height:bb.height+2*pad};
+    const sx = (W - 120) / bbp.width; const sy = (H - 120) / bbp.height; const k = Math.min(sx, sy);
+    const x = -bbp.x * k + (W - bbp.width * k)/2; const y = -bbp.y * k + (H - bbp.height * k)/2;
+    return {x,y,k};
+  }
+
+  const STAGES = 7;
   let stage = 0;
+  let lastStage = null;
 
   function resetScene(){
     yearMap.forEach(({group})=>{ group.setAttribute('class','year'); });
     monthMap.forEach(({group, focusRing})=>{
       group.setAttribute('class','month');
-      if(focusRing) focusRing.style.opacity = '0';
+      if(focusRing){
+        focusRing.style.opacity = '0';
+        focusRing.style.stroke = '';
+      }
     });
   }
 
@@ -265,79 +376,178 @@
     document.getElementById('expl').innerHTML = expl;
   }
 
+  function setScenePill(){
+    const el = document.getElementById('scenePill');
+    if(el){ el.textContent = `Scene ${stage+1}/${STAGES}`; }
+  }
+
+  function getPreset(key){ try{ const s=localStorage.getItem(key); return s?JSON.parse(s):null; }catch{ return null; } }
+  // simple timer management for staged animations
+  let animTimers = [];
+  function clearAnimTimers(){ animTimers.forEach(id=>clearTimeout(id)); animTimers = []; }
+
   function update(){
+    setScenePill();
     resetScene();
+    clearAnimTimers();
+    const fromStage = lastStage;
+    // toggle which root is visible
+    if(root9){ root9.style.display = (stage===6) ? '' : 'none'; }
+    if(root){ root.style.display = (stage===6) ? 'none' : ''; }
     const focusMonthInfo = monthMap.get(`${focusYear}-${focusMonth}`);
     const focusYearInfo = yearMap.get(focusYear);
     const decemberInfo = monthMap.get(`${focusYear}-11`);
 
+    // Scene 1 (new): month starts blank, then values reveal sequentially
     if(stage===0){
       yearMap.forEach(({group}, y)=>{ if(y!==focusYear) group.classList.add('dimmed'); });
       focusYearInfo.months.forEach(m=>{ if(m.month!==focusMonth) m.group.classList.add('dimmed'); });
-      focusMonthInfo.group.classList.add('show-values');
-      focusElement(focusMonthInfo.group, 40);
-      setAside(`<strong>${monthName(focusMonth)} ${focusYear}</strong> — Daily inventory snapshot`,
-        `Imagine you're tracking the number of widgets stored in a warehouse over time. Each cell shows the ending inventory for that day.`);
+      // ensure all values are hidden for the focused month
+      focusMonthInfo.days.forEach(d=>{ d.valueText.style.opacity = '0'; });
+      // camera preset same as normal month scenes
+      const p0 = getPreset('lnb-scene0') || VIEW_PRESETS.scene0;
+      if(p0 && typeof p0.x==='number' && typeof p0.y==='number' && typeof p0.k==='number') setCam(p0.x,p0.y,p0.k); else focusElement(focusMonthInfo.group, 40);
+      // after 1s, reveal values sequentially across ~5s
+      const dim = focusMonthInfo.days.length; const step = 5000/Math.max(1,dim);
+      const startDelay = 1000;
+      focusMonthInfo.days.forEach((d,i)=>{
+        const id = setTimeout(()=>{ d.valueText.style.opacity = '1'; }, startDelay + Math.round(i*step));
+        animTimers.push(id);
+      });
+      setAside(`<strong>${monthName(focusMonth)} ${focusYear}</strong> — Daily records appear`,
+        `This month starts with no visible values. After a short pause, daily inventory values populate one by one.`);
     }
     else if(stage===1){
       yearMap.forEach(({group}, y)=>{ if(y!==focusYear) group.classList.add('dimmed'); });
       focusYearInfo.months.forEach(m=>{ if(m.month!==focusMonth) m.group.classList.add('dimmed'); });
-      focusMonthInfo.group.classList.add('show-values','highlight-all');
-      focusElement(focusMonthInfo.group, 40);
-      setAside('<strong>Daily totals highlighted</strong>',
-        `If you record inventory every day, you can still review the month by selecting every single daily value — similar to how a SUM would treat daily totals.`);
+      // Clear any inline opacity set during intro animation
+      focusMonthInfo.days.forEach(d=>{ d.valueText.style.opacity = ''; });
+      focusMonthInfo.group.classList.add('show-values');
+      // Use preset camera for Scene 1 (localStorage overrides default)
+      const p = getPreset('lnb-scene0') || VIEW_PRESETS.scene0;
+      if(p && typeof p.x==='number' && typeof p.y==='number' && typeof p.k==='number'){
+        setCam(p.x, p.y, p.k);
+      } else {
+        focusElement(focusMonthInfo.group, 40);
+      }
+      setAside(`<strong>${monthName(focusMonth)} ${focusYear}</strong> — Daily inventory snapshot`,
+        `Imagine you're tracking the number of widgets stored in a warehouse over time. Each cell shows the ending inventory for that day.`);
     }
     else if(stage===2){
       yearMap.forEach(({group}, y)=>{ if(y!==focusYear) group.classList.add('dimmed'); });
       focusYearInfo.months.forEach(m=>{ if(m.month!==focusMonth) m.group.classList.add('dimmed'); });
-      focusMonthInfo.group.classList.add('show-values');
-      requestAnimationFrame(()=>{
-        focusMonthInfo.group.classList.add('focus-last','show-badge');
-      });
-      focusElement(focusMonthInfo.group, 40);
-      setAside('<strong>Last day represents the month</strong>',
-        `To understand the month without summing or averaging, LASTNONBLANK keeps just the inventory from the final day. All other days fade into the background.`);
+      // Clear any inline opacity set during intro animation
+      focusMonthInfo.days.forEach(d=>{ d.valueText.style.opacity = ''; });
+      focusMonthInfo.group.classList.add('show-values','highlight-all');
+      const p = getPreset('lnb-scene1') || VIEW_PRESETS.scene1;
+      if(p && typeof p.x==='number' && typeof p.y==='number' && typeof p.k==='number') setCam(p.x,p.y,p.k); else focusElement(focusMonthInfo.group, 40);
+      setAside('<strong>Daily totals highlighted</strong>',
+        `If you record inventory every day, you can still review the month by selecting every single daily value — similar to how a SUM would treat daily totals.`);
     }
     else if(stage===3){
       yearMap.forEach(({group}, y)=>{ if(y!==focusYear) group.classList.add('dimmed'); });
-      focusYearInfo.months.forEach(m=>{ m.group.classList.add('focus-last','show-badge'); });
-      focusElement(focusYearInfo.group, 60);
-      setAside(`<strong>${focusYear} at a glance</strong>`,
-        `Rolling up to the month level gives one value per month — the inventory on the last day of that month. It's perfect for showing how stock changed throughout the year.`);
+      focusYearInfo.months.forEach(m=>{ if(m.month!==focusMonth) m.group.classList.add('dimmed'); });
+      // Show values and highlight only the last day (no badge)
+      // Clear any inline opacity set during intro animation
+      focusMonthInfo.days.forEach(d=>{ d.valueText.style.opacity = ''; });
+      focusMonthInfo.group.classList.add('show-values','highlight-last');
+      const p = getPreset('lnb-scene2') || VIEW_PRESETS.scene2;
+      if(p && typeof p.x==='number' && typeof p.y==='number' && typeof p.k==='number') setCam(p.x,p.y,p.k); else focusElement(focusMonthInfo.group, 40);
+      setAside('<strong>Last day represents the month</strong>',
+        `To understand the month without summing or averaging, LASTNONBLANK keeps just the inventory from the final day. All other days fade into the background.`);
     }
     else if(stage===4){
       yearMap.forEach(({group}, y)=>{ if(y!==focusYear) group.classList.add('dimmed'); });
-      focusYearInfo.months.forEach(m=>{
-        if(m.month===11){
-          m.group.classList.add('focus-last','show-badge');
-          if(m.focusRing) m.focusRing.style.opacity = '1';
-        }else{
-          m.group.classList.add('dimmed');
+      // Highlight only the last day in each month (same formatting as Scene 3)
+      focusYearInfo.months.forEach(m=>{ m.group.classList.add('show-values','highlight-last'); });
+      const p = getPreset('lnb-scene3') || VIEW_PRESETS.scene3;
+      if(fromStage === 3){
+        if(p && typeof p.x==='number' && typeof p.y==='number' && typeof p.k==='number'){
+          animateTo({x:p.x,y:p.y,k:p.k}, 2000);
+        } else {
+          const target = cameraTargetForElement(focusYearInfo.group, 60);
+          animateTo(target, 2000);
         }
-      });
-      focusElement(focusYearInfo.group, 60);
-      const last = decemberInfo.lastDay;
-      setAside('<strong>Year-end focus</strong>',
-        `For annual reporting we keep only December's final reading — day ${last.day} with ${last.value} units. That single value carries the year-end inventory forward.`);
+      } else {
+        if(p && typeof p.x==='number' && typeof p.y==='number' && typeof p.k==='number') setCam(p.x,p.y,p.k); else focusElement(focusYearInfo.group, 60);
+      }
+      setAside(`<strong>${focusYear} at a glance</strong>`,
+        `Rolling up to the month level gives one value per month — the inventory on the last day of that month. It's perfect for showing how stock changed throughout the year.`);
     }
     else if(stage===5){
-      yearMap.forEach(({group, months})=>{
+      // Multi-year trend: keep all months visible across all years; only December's last day highlighted (no badges, no dimming)
+      yearMap.forEach(({months})=>{
         months.forEach(m=>{
+          // reset any previous scene classes
+          m.group.classList.remove('dimmed','focus-last','show-badge','highlight-all','multi-highlight','highlight-last');
+          // show values for all months
+          m.group.classList.add('show-values');
+          // default ring hidden
+          if(m.focusRing) m.focusRing.style.opacity = '0';
+          // highlight only December's last day and show ring
           if(m.month===11){
-            m.group.classList.add('focus-last','show-badge','multi-highlight');
-            if(m.focusRing) m.focusRing.style.opacity = '1';
-          }else{
-            m.group.classList.add('dimmed');
+            m.group.classList.add('highlight-last');
+            if(m.focusRing){ m.focusRing.style.opacity = '1'; m.focusRing.style.stroke = 'var(--pink)'; }
           }
         });
       });
-      fitToBBox(root.getBBox(), 60);
+      // Use the same camera as Scene 5 (stage 4)
+      const pSame = getPreset('lnb-scene3') || VIEW_PRESETS.scene3;
+      if(pSame && typeof pSame.x==='number' && typeof pSame.y==='number' && typeof pSame.k==='number') setCam(pSame.x,pSame.y,pSame.k); else focusElement(yearMap.get(focusYear).group, 60);
       setAside('<strong>Multi-year trend</strong>',
-        `By keeping just the last non-blank day of the last month for each year, we can monitor inventory patterns across many years without plotting every single day. That's the power of LASTNONBLANK.`);
+        `Across years, only the last non-blank day of the last month (December) is highlighted, while all other months remain visible.`);
     }
+    else if(stage===6){
+      // Scene 7: 3x3 nine-year grid, all months visible; highlight December last day for each year
+      yearMap9.forEach(({months})=>{
+        months.forEach(m=>{
+          m.group.setAttribute('class','month');
+          m.group.classList.add('show-values');
+          if(m.focusRing) m.focusRing.style.opacity = '0';
+          if(m.month===11){
+            m.group.classList.add('highlight-last');
+            if(m.focusRing){ m.focusRing.style.opacity = '1'; m.focusRing.style.stroke = 'var(--pink)'; }
+          }
+        });
+      });
+      const pGrid = getPreset('lnb-scene6') || VIEW_PRESETS.scene6;
+      if(fromStage === 5){
+        if(pGrid && typeof pGrid.x==='number' && typeof pGrid.y==='number' && typeof pGrid.k==='number'){
+          animateTo({x:pGrid.x,y:pGrid.y,k:pGrid.k}, 2000);
+        } else {
+          const target = cameraTargetForElement(root9, 60);
+          animateTo(target, 2000);
+        }
+      } else {
+        if(pGrid && typeof pGrid.x==='number' && typeof pGrid.y==='number' && typeof pGrid.k==='number') setCam(pGrid.x,pGrid.y,pGrid.k); else fitToBBox(root9.getBBox(), 60);
+      }
+      setAside('<strong>Many years at a glance</strong>',
+        'Nine-year grid: only December\'s last day is highlighted for each year to compare year-end inventory across a longer horizon.');
+    }
+
+    // remember stage for next transition
+    lastStage = stage;
   }
 
   update();
+
+  // Aside toggle and layout handling
+  (function(){
+    const btn = document.getElementById('toggleAsideBtn');
+    const aside = document.getElementById('aside');
+    const stageEl = document.querySelector('.stage');
+    function setVisible(vis){
+      if(!aside || !stageEl || !btn) return;
+      aside.style.display = vis ? '' : 'none';
+      stageEl.style.gridTemplateColumns = vis ? '1fr 320px' : '1fr';
+      btn.textContent = vis ? 'Hide details' : 'Show details';
+      try{ localStorage.setItem('lnb-aside', vis ? '1' : '0'); }catch{ /* ignore */ }
+    }
+    // Initialize from saved preference
+    let saved = null; try{ saved = localStorage.getItem('lnb-aside'); }catch{}
+    setVisible(saved === '1');
+    if(btn){ btn.addEventListener('click', ()=>{ const vis = aside && getComputedStyle(aside).display==='none'; setVisible(vis); }); }
+  })();
 
   window.addEventListener('keydown', (e)=>{
     if(e.key==='ArrowRight'){
@@ -351,10 +561,51 @@
     else if(e.key==='r' || e.key==='R'){
       stage = 0; update();
     }
+    else if(e.key==='s' || e.key==='S'){
+      try{
+        const idx = Math.max(0, Math.min(STAGES-1, stage|0));
+        localStorage.setItem(`lnb-scene${idx}`, JSON.stringify(cam));
+      }catch{}
+    }
   });
 
+  // Panning helpers: Space+drag or middle mouse drag
+  let isPanning = false, panMoved = false, panStart = null, panSuppressClickUntil = 0, spaceHeld = false;
+  window.addEventListener('keydown', (e)=>{
+    if(e.code==='Space'){
+      spaceHeld = true;
+      // prevent page scroll when using space to pan
+      const ae=document.activeElement; const isTyping = ae && (ae.tagName==='INPUT' || ae.tagName==='TEXTAREA' || ae.isContentEditable);
+      if(!isTyping) e.preventDefault();
+    }
+  });
+  window.addEventListener('keyup', (e)=>{ if(e.code==='Space') spaceHeld=false; });
+  svg.addEventListener('mousedown', (e)=>{
+    const isMiddle = (e.button===1);
+    if(isMiddle || spaceHeld || e.button===0){
+      isPanning = true; panMoved = false; panStart = {x:e.clientX, y:e.clientY};
+      svg.style.cursor = 'grabbing';
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('mousemove', (e)=>{
+    if(!isPanning) return;
+    const dx = e.clientX - panStart.x; const dy = e.clientY - panStart.y;
+    if(Math.abs(dx)>1 || Math.abs(dy)>1) panMoved = true;
+    panStart = {x:e.clientX, y:e.clientY};
+    const sx = W / svg.clientWidth; const sy = H / svg.clientHeight;
+    setCam(cam.x + dx * sx, cam.y + dy * sy, cam.k);
+  });
+  window.addEventListener('mouseup', ()=>{
+    if(isPanning){
+      isPanning=false; svg.style.cursor='';
+      if(panMoved) panSuppressClickUntil = performance.now() + 250;
+    }
+  });
+
+  // Scroll to zoom (cursor-centered)
   svg.addEventListener('wheel', (e)=>{
-    if(!e.shiftKey) return; e.preventDefault();
+    e.preventDefault();
     const factor = Math.pow(1.0015, -e.deltaY);
     const k = clamp(cam.k * factor, 0.15, 20);
     const mx = e.offsetX / svg.clientWidth * W; const my = e.offsetY / svg.clientHeight * H;
@@ -363,16 +614,20 @@
   }, {passive:false});
 
   svg.addEventListener('click', (e)=>{
+    if(performance.now() < panSuppressClickUntil) return;
     const monthEl = e.target.closest('g.month');
     if(monthEl){
+      const inGrid9 = !!monthEl.closest('#root9');
       const key = `${monthEl.closest('g.year').dataset.year}-${monthEl.dataset.month}`;
-      const info = monthMap.get(key);
-      focusElement(info.group, 30);
+      const info = inGrid9 ? monthMap9.get(key) : monthMap.get(key);
+      if(info) focusElement(info.group, 30);
     }
     const yearEl = e.target.closest('g.year');
     if(yearEl){
-      const info = yearMap.get(Number(yearEl.dataset.year));
-      focusElement(info.group, 60);
+      const inGrid9 = !!yearEl.closest('#root9');
+      const id = Number(yearEl.dataset.year);
+      const info = inGrid9 ? yearMap9.get(id) : yearMap.get(id);
+      if(info) focusElement(info.group, 60);
     }
   });
 })();
